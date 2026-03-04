@@ -10,6 +10,7 @@ from benchmark.benchmark_runner import (
     cancel_batch_jobs,
     run_benchmark_with_retry,
 )
+from benchmark.metrics_cim import run_cim_metrics_cli
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -87,9 +88,9 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--cim-judge-variant",
-        choices=["default", "reveal_paper_compat"],
+        choices=["default", "reveal_paper_compat", "reveal_official"],
         default=None,
-        help="CIM judge variant: 'default' (legacy) or 'reveal_paper_compat' (REVEAL metric). Default: reveal_paper_compat",
+        help="CIM judge variant: 'default' (legacy), 'reveal_paper_compat' (REVEAL metric), or 'reveal_official' (official CIMemories REVEAL). Default: reveal_paper_compat",
     )
     parser.add_argument(
         "--generator-model",
@@ -199,7 +200,35 @@ async def main_async() -> int:
     )
     _add_arguments(judge_parser)
 
+    cim_metrics_parser = subparsers.add_parser(
+        "cim-metrics",
+        help="Compute aggregate CIM metrics (violation + coverage) from checkpoint",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""
+            Computes official CIMemories violation and coverage metrics from a
+            checkpoint/output JSON file.
+
+            Example:
+              benchmark cim-metrics output.json
+              benchmark cim-metrics output.json --model gpt-4o
+        """),
+    )
+    cim_metrics_parser.add_argument(
+        "file",
+        help="Checkpoint/output JSON file to compute metrics from",
+    )
+    cim_metrics_parser.add_argument(
+        "--model",
+        default=None,
+        help="Filter results to a specific model name",
+    )
+
     args = parser.parse_args()
+
+    if args.subcommand == "cim-metrics":
+        run_cim_metrics_cli(args.file, model_name=args.model)
+        return 0
+
     return await _handle(args)
 
 

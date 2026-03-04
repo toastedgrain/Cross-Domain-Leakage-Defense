@@ -16,4 +16,4 @@
     "output": "outputs/vertex_test.json",
     "concurrency": 1,
     "limit": 5
-  }
+}
