@@ -462,6 +462,24 @@ def get_vertex_project_id() -> str:
     )
 
 
+def get_vertex_credentials() -> Credentials:
+    """Get Vertex AI credentials from service account file.
+
+    Returns authenticated Credentials scoped for cloud-platform.
+    Used by both the OpenAI-compat client and the batch provider.
+    """
+    sa_path = _get_service_account_path()
+    if not os.path.exists(sa_path):
+        raise FatalBenchmarkError(
+            f"Service account file not found at '{sa_path}'. "
+            "Set VERTEXAI_SERVICE_ACCOUNT_PATH to a valid service account JSON file path."
+        )
+    return Credentials.from_service_account_file(
+        sa_path,
+        scopes=["https://www.googleapis.com/auth/cloud-platform"],
+    )
+
+
 def get_vertex_ai_base_url(location: str | None = None) -> str:
     """Get Vertex AI base URL for a specific location.
 
@@ -488,16 +506,7 @@ def get_vertex_ai_client(location: str | None = None) -> AsyncOpenAI:
     Args:
         location: GCP location (e.g., "us-central1"). Falls back to env var or default.
     """
-    if not os.getenv("VERTEXAI_SERVICE_ACCOUNT_PATH"):
-        raise FatalBenchmarkError(
-            "VERTEXAI_SERVICE_ACCOUNT_PATH is not set, point it to the Vertex AI service account credentials file path"
-        )
-    service_account_path = _get_service_account_path()
-    credentials = Credentials.from_service_account_file(
-        service_account_path,
-        scopes=["https://www.googleapis.com/auth/cloud-platform"],
-    )
-
+    credentials = get_vertex_credentials()
     auth_request = Request()
     credentials.refresh(auth_request)
     client = AsyncOpenAI(
@@ -572,12 +581,15 @@ async def openai_compat_generate(
     Routes api_params to either direct kwargs or extra_body based on whether
     they are recognized by the OpenAI SDK.
     """
+    from benchmark.config import BENCHMARK_SEED
+
     params: dict[str, Any] = {
         "model": model.name,
         "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_message},
         ],
+        "seed": BENCHMARK_SEED,
     }
 
     extra_body: dict[str, Any] = {}

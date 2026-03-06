@@ -261,9 +261,13 @@ def initialize_checkpoint(
     existing_batch_jobs = previous_metadata.get("batch_jobs")
 
     # Resolve judge model name based on provider
-    current_judge_model = (
-        JUDGE_MODEL_OPENROUTER if judge_provider == "openrouter" else JUDGE_MODEL
-    )
+    if judge_provider == "openrouter":
+        current_judge_model = JUDGE_MODEL_OPENROUTER
+    elif judge_provider == "gemini":
+        from benchmark.config import JUDGE_MODEL_GEMINI
+        current_judge_model = JUDGE_MODEL_GEMINI
+    else:
+        current_judge_model = JUDGE_MODEL
     if previous_metadata:
         existing_judge_model = previous_metadata.get("judge_model")
 

@@ -41,9 +41,13 @@ def run_dry_run(
     models = config.models
     output_file = config.output
     judge_provider = get_judge_provider()
-    judge_model = (
-        JUDGE_MODEL_OPENROUTER if judge_provider == "openrouter" else JUDGE_MODEL
-    )
+    if judge_provider == "openrouter":
+        judge_model = JUDGE_MODEL_OPENROUTER
+    elif judge_provider == "gemini":
+        from benchmark.config import JUDGE_MODEL_GEMINI
+        judge_model = JUDGE_MODEL_GEMINI
+    else:
+        judge_model = JUDGE_MODEL
     concurrency = config.concurrency
 
     total_generations = sum(

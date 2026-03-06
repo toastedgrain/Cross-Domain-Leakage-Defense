@@ -54,7 +54,7 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--judge-provider",
-        choices=["vertexai", "openrouter"],
+        choices=["vertexai", "openrouter", "gemini"],
         help="Judge provider (overrides config and env var). Default: openrouter",
     )
     parser.add_argument(

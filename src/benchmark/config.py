@@ -48,11 +48,15 @@ _LEGACY_ALIASES = {
 }
 
 JUDGE_MODEL = "moonshotai/kimi-k2-thinking-maas"  # Vertex AI model name
-JUDGE_MODEL_OPENROUTER = "moonshotai/kimi-k2-thinking"  # OpenRouter model name
+JUDGE_MODEL_OPENROUTER = "qwen/qwen3-235b-a22b"  # OpenRouter model name
+JUDGE_MODEL_GEMINI = "gemini-2.5-flash"  # Google AI Studio model name
 JUDGE_LOCATION = "global"
 JUDGE_TEMPERATURE = 0.0
 
-VALID_JUDGE_PROVIDERS = {"vertexai", "openrouter"}
+# Global seed for reproducibility across all providers
+BENCHMARK_SEED = 42
+
+VALID_JUDGE_PROVIDERS = {"vertexai", "openrouter", "gemini"}
 
 
 class ModelEntry(BaseModel):
@@ -70,7 +74,7 @@ JUDGE_MODEL_ENTRY_OPENROUTER = ModelEntry(
     name=JUDGE_MODEL_OPENROUTER,
     api_params={
         "temperature": JUDGE_TEMPERATURE,
-        "provider": {"order": ["google-vertex"], "allow_fallbacks": False},
+        "seed": BENCHMARK_SEED,
         "reasoning": {"enabled": True, "effort": "high"},
     },
 )

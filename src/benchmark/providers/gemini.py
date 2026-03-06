@@ -296,8 +296,11 @@ async def gemini_generate(
     user_message: str,
 ) -> GenerateResult:
     """Generate response using Gemini API."""
+    from benchmark.config import BENCHMARK_SEED
+
     client = _get_shared_client()
     config_kwargs: dict[str, Any] = dict(model.api_params or {})
+    config_kwargs.setdefault("seed", BENCHMARK_SEED)
     if system_prompt:
         config_kwargs["system_instruction"] = system_prompt
 

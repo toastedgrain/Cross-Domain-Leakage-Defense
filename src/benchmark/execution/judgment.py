@@ -27,6 +27,7 @@ from benchmark.config import (
     BenchmarkConfig,
     FAILURE_TYPE_CIM,
     JUDGE_MODEL,
+    JUDGE_MODEL_GEMINI,
     JUDGE_LOCATION,
     JUDGE_TEMPERATURE,
     JUDGE_MODEL_ENTRY_OPENROUTER,
@@ -41,6 +42,7 @@ from benchmark.prompts import (
     get_cim_judge_prompt,
     get_judge_system_prompt,
 )
+from benchmark.providers.gemini import gemini_generate
 from benchmark.providers.openrouter import openrouter_generate_response
 from benchmark.types import JudgeResult
 from benchmark.utils import (
@@ -70,7 +72,7 @@ def get_judge_provider() -> str:
     """Get judge provider with precedence: runtime > env > default."""
     if _runtime_judge_provider is not None:
         return _runtime_judge_provider
-    return os.getenv("JUDGE_PROVIDER", "openrouter")
+    return os.getenv("JUDGE_PROVIDER", "gemini")
 
 
 def set_judge_model(model_name: str | None) -> None:
@@ -86,6 +88,8 @@ def get_judge_model() -> str:
     provider = get_judge_provider()
     if provider == "openrouter":
         return JUDGE_MODEL_OPENROUTER
+    if provider == "gemini":
+        return JUDGE_MODEL_GEMINI
     return JUDGE_MODEL
 
 
@@ -325,6 +329,8 @@ async def _judge_via_vertexai(
     system_prompt: str, user_message: str, model_name: str | None = None
 ) -> JudgeResult:
     """Call Vertex AI judge."""
+    from benchmark.config import BENCHMARK_SEED
+
     judge_model = model_name or JUDGE_MODEL
     async with get_vertex_ai_client(location=JUDGE_LOCATION) as client:
         messages = [
@@ -336,6 +342,7 @@ async def _judge_via_vertexai(
             "model": judge_model,
             "messages": messages,
             "temperature": JUDGE_TEMPERATURE,
+            "seed": BENCHMARK_SEED,
         }
 
         try:
@@ -373,6 +380,34 @@ async def _judge_via_openrouter(
     return _parse_judge_content(gen_result["response"], gen_result["raw_api_response"])
 
 
+async def _judge_via_gemini(
+    system_prompt: str, user_message: str, model_name: str | None = None
+) -> JudgeResult:
+    """Call Gemini (Google AI Studio) judge with structured JSON output."""
+    from benchmark.config import BENCHMARK_SEED
+
+    judge_model = model_name or JUDGE_MODEL_GEMINI
+    model_entry = ModelEntry(
+        name=judge_model,
+        provider="gemini",
+        api_params={
+            "temperature": JUDGE_TEMPERATURE,
+            "max_output_tokens": 4096,
+            "response_mime_type": "application/json",
+            "response_json_schema": {
+                "type": "object",
+                "properties": {
+                    "reasoning": {"type": "string"},
+                    "score": {"type": "integer"},
+                },
+                "required": ["reasoning", "score"],
+            },
+        },
+    )
+    gen_result = await gemini_generate(model_entry, system_prompt, user_message)
+    return _parse_judge_content(gen_result["response"], gen_result["raw_api_response"])
+
+
 @retry(
     stop=stop_after_attempt(get_max_retries()),
     wait=wait_exponential(multiplier=1, min=2, max=10),
@@ -395,10 +430,14 @@ async def judge_response(
             return await _judge_via_vertexai(
                 system_prompt, user_message, model_name=judge_model
             )
+        elif provider == "gemini":
+            return await _judge_via_gemini(
+                system_prompt, user_message, model_name=judge_model
+            )
         else:
             raise FatalBenchmarkError(
                 f"Unknown judge provider: {provider}. "
-                "Supported values: 'vertexai', 'openrouter'"
+                "Supported values: 'vertexai', 'openrouter', 'gemini'"
             )
     except (FatalBenchmarkError, NonRetryableError):
         raise
@@ -445,6 +484,8 @@ async def judge_response_cim(
                 gen_result["response"], gen_result["raw_api_response"], entry
             )
         elif provider == "vertexai":
+            from benchmark.config import BENCHMARK_SEED
+
             model = judge_model or JUDGE_MODEL
             async with get_vertex_ai_client(location=JUDGE_LOCATION) as client:
                 messages = [
@@ -452,17 +493,34 @@ async def judge_response_cim(
                     {"role": "user", "content": user_message},
                 ]
                 response = await client.chat.completions.create(
-                    model=model, messages=messages, temperature=JUDGE_TEMPERATURE
+                    model=model, messages=messages, temperature=JUDGE_TEMPERATURE,
+                    seed=BENCHMARK_SEED,
                 )
                 return parse_fn(
                     response.choices[0].message.content,
                     response.model_dump(),
                     entry,
                 )
+        elif provider == "gemini":
+            model_entry = ModelEntry(
+                name=judge_model or JUDGE_MODEL_GEMINI,
+                provider="gemini",
+                api_params={
+                    "temperature": JUDGE_TEMPERATURE,
+                    "max_output_tokens": 4096,
+                    "response_mime_type": "application/json",
+                },
+            )
+            gen_result = await gemini_generate(
+                model_entry, system_prompt, user_message
+            )
+            return parse_fn(
+                gen_result["response"], gen_result["raw_api_response"], entry
+            )
         else:
             raise FatalBenchmarkError(
                 f"Unknown judge provider: {provider}. "
-                "Supported values: 'vertexai', 'openrouter'"
+                "Supported values: 'vertexai', 'openrouter', 'gemini'"
             )
     except (FatalBenchmarkError, NonRetryableError):
         raise
