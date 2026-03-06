@@ -11,11 +11,8 @@
       }
     }
   ],
-  "judge": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+  "judge_model": "qwen/qwen3-235b-a22b-instruct-2507-maas",
   "judge_provider": "vertexai",
-  "judge_api_params": {
-    "location": "global"
-  },
   "input": "benchmark_samples/cross_domain.jsonl",
   "output": "outputs/vertex_test.json",
   "concurrency": 1,
