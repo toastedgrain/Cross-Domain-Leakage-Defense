@@ -1,6 +1,6 @@
 # Dry Run Prompt Preview
 
-**Generated:** 2026-02-23 21:54:23
+**Generated:** 2026-03-05 17:30:08
 
 ---
 
@@ -17,14 +17,14 @@
 <details>
 <summary><strong>Generator System Prompt</strong></summary>
 
-**Model:** `name='google/gemini-2.5-flash' provider='vertexai' mode='sequential' api_params={'location': 'global', 'temperature': 0.2, 'max_output_tokens': 1024} base_url=None api_key_env=None`
+**Model:** `name='llama-3.3-70b-instruct-maas' provider='vertexai' mode='batch' api_params={'location': 'us-central1', 'temperature': 0.2, 'max_output_tokens': 1024} base_url=None api_key_env=None`
 
 ```
 system_message:
 role: system
-model: google/gemini-2.5-flash
+model: llama-3.3-70b-instruct-maas
 ---
-You are google/gemini-2.5-flash, a large language model.
+You are llama-3.3-70b-instruct-maas, a large language model.
 Knowledge cutoff: 2024-06
 Current date: 2025-08-07
 

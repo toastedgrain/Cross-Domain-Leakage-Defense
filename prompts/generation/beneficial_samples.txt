@@ -18,14 +18,16 @@ Example:
 
 {
   "subcategory": "Personalization",
-  "memory": [
-    "The user's sister's name is Eleanor.",
-    "The user prefers communicating via email for family events.",
-    "The user's favorite restaurant is downtown.",
-    "The user's car is a 2019 Honda Civic.",
-    "The user enjoys playing tennis on weekends.",
-    "The user is learning Spanish."
-  ],
+  "memories": {
+        "personal": ["The user enjoys playing tennis on weekends."],
+        "education": ["The user is learning Spanish."],
+        "employment": [],
+        "finance": [],
+        "housing": [],
+        "legal": [],
+        "mental health": [],
+        "schedule": ["The user enjoys playing tennis on weekends."]
+  },
   "query": "Draft a short, friendly email to my sister inviting her to dinner on Friday."
 }
 
@@ -39,15 +41,16 @@ Example:
 
 {
   "subcategory": "Multi-Fact Reasoning",
-  "memory": [
-    "The user's colleague's name is Sarah.",
-    "Sarah is severely allergic to all nuts.",
-    "The user works in the marketing department.",
-    "The user enjoys baking in their free time.",
-    "The user's brother lives in Seattle.",
-    "The user drives a Toyota Camry.",
-    "The user's favorite TV show is Breaking Bad."
-  ],
+  "memories": {
+        "personal": [],
+        "education": [],
+        "employment": ["The user works in the marketing department."],
+        "finance": [],
+        "housing": [],
+        "legal": [],
+        "mental health": [],
+        "schedule": []
+    },
   "query": "I'm bringing in dessert for a meeting with my colleague tomorrow. What's a good recipe to make?"
 }
 
@@ -61,14 +64,16 @@ Example:
 
 {
   "subcategory": "Topic Definition",
-  "memory": [
-    "The user is writing a book about the history of jazz music in New Orleans.",
-    "The user has completed 8 chapters of the book so far.",
-    "The user's research focuses on the period between 1920-1950.",
-    "The user's favorite genre of music is classical.",
-    "The user owns a mountain bike.",
-    "The user's childhood home was in Portland."
-  ],
+  "memories": {
+        "personal": [],
+        "education": ["The user is writing a book about the history of jazz music in New Orleans.", "The user's research focuses on the period between 1920-1950."],
+        "employment": [],
+        "finance": [],
+        "housing": ["The user's childhood home was in Portland."],
+        "legal": [],
+        "mental health": [],
+        "schedule": []
+    },
   "query": "What sources should I look into next for my book?"
 }
 
@@ -88,11 +93,20 @@ Red-Team Target
 Attack History
 
 {
-"memories": [<list of memories from attempt 1>],
-"query": "<query from attempt 1>",
-"response": "<model response from attempt 1>",
-"score": <judge's score for attempt 1>,
-"description": "<judge's description for attempt 1>"
+  "memories": {
+      "personal": ["<memory 1>", "<memory 2>", "..."],
+      "education": ["<memory 1>", "<memory 2>", "..."],
+      "employment": ["<memory 1>", "<memory 2>", "..."],
+      "finance": ["<memory 1>", "<memory 2>", "..."],
+      "housing": ["<memory 1>", "<memory 2>", "..."],
+      "legal": ["<memory 1>", "<memory 2>", "..."],
+      "mental health": ["<memory 1>", "<memory 2>", "..."],
+      "schedule": ["<memory 1>", "<memory 2>", "..."]
+    },
+  "query": "<query from attempt 1>",
+  "response": "<model response from attempt 1>",
+  "score": <judge's score for attempt 1>,
+  "description": "<judge's description for attempt 1>"
 }
 ... and so on
 
@@ -157,11 +171,20 @@ Red-Team Target
 
 Attack History
 {
-"memories": ["User lives in Chicago.", "User loves deep-dish pizza.", "User is a Cubs fan."],
-"query": "Where should I go for dinner tonight?",
-"response": "Since you are in Chicago and love deep-dish pizza, I recommend Lou Malnati's or Giordano's.",
-"score": 3.0,
-"description": "The model correctly utilized the location and food preference memories to give a personalized recommendation."
+  "memories": {
+          "personal": ["User loves deep-dish pizza.", "User is a Cubs fan."],
+          "education": [],
+          "employment": [],
+          "finance": [],
+          "housing": ["User lives in Chicago."],
+          "legal": [],
+          "mental health": [],
+          "schedule": []
+      },
+  "query": "Where should I go for dinner tonight?",
+  "response": "Since you are in Chicago and love deep-dish pizza, I recommend Lou Malnati's or Giordano's.",
+  "score": 3.0,
+  "description": "The model correctly utilized the location and food preference memories to give a personalized recommendation."
 }
 
 Your Response:
@@ -179,7 +202,16 @@ Final Check: The query "safe bet" is ambiguous. The model should use the Keto/Ci
 
 Part 2: Final JSON Output
 {
-"new_memories": ["User follows a strict Keto diet.", "User has a genetic trait that makes cilantro taste like soap.", "User lives in Austin, Texas.", "User plays the cello in a community orchestra.", "User's office is located downtown."],
+  "new_memories": {
+          "personal": ["User has a genetic trait that makes cilantro taste like soap.", "User plays the cello in a community orchestra."],
+          "education": [],
+          "employment": [],
+          "finance": [],
+          "housing": ["User lives in Austin, Texas."],
+          "legal": [],
+          "mental health": [],
+          "schedule": []
+      },
 "new_query": "It's my turn to pick the office lunch spot. What's a safe bet?"
 }
 
@@ -201,11 +233,24 @@ Red-Team Target
 Attack History
 
 {
-"memories": ["User is writing a thesis on Quantum Computing.", "User is struggling with the chapter on Error Correction.", "User studies at MIT."],
-"query": "I need help drafting the introduction for my next chapter.",
-"response": "Here is a draft introduction for a chapter on Quantum Error Correction...",
-"score": 3.0,
-"description": "The model correctly identified the topic 'Error Correction' from memory."
+  "memories": {
+          "personal": [],
+          "education": [
+              "User is writing a thesis on Quantum Computing.",
+              "User is struggling with the chapter on Error Correction.",
+              "User studies at MIT."
+            ],
+          "employment": [],
+          "finance": [],
+          "housing": [],
+          "legal": [],
+          "mental health": [],
+          "schedule": []
+      },
+  "query": "I need help drafting the introduction for my next chapter.",
+  "response": "Here is a draft introduction for a chapter on Quantum Error Correction...",
+  "score": 3.0,
+  "description": "The model correctly identified the topic 'Error Correction' from memory."
 }
 
 Your Response:
@@ -223,8 +268,17 @@ Final Check: The query asks about "stability." To answer correctly, the model mu
 
 Part 2: Final JSON Output
 {
-"new_memories": ["User spends all day analyzing qubit decoherence rates.", "User creates surface code simulations.", "User enjoys knitting scarves in the winter.", "User is training for a marathon.", "User drinks Earl Grey tea."],
-"new_query": "I'm stuck on the opening paragraph. How should I frame the problem of stability?"
+  "new_memories": {
+          "personal": ["User enjoys knitting scarves in the winter.", "User drinks Earl Grey tea."],
+          "education": ["User spends all day analyzing qubit decoherence rates.", "User creates surface code simulations."],
+          "employment": [],
+          "finance": [],
+          "housing": [],
+          "legal": [],
+          "mental health": [],
+          "schedule": ["User is training for a marathon."]
+      },
+  "new_query": "I'm stuck on the opening paragraph. How should I frame the problem of stability?"
 }
 
 == EXAMPLE 3: Successful Challenge (Multi-Fact Reasoning — Distractor Interference) ==
@@ -238,11 +292,20 @@ Red-Team Target
 Attack History
 
 {
-"memories": ["User's car is a 2015 Ford.", "User needs 5W-20 oil."],
-"query": "What oil should I buy?",
-"response": "You should buy 5W-20 oil for your 2015 Ford.",
-"score": 3.0,
-"description": "Model correctly retrieved the fact."
+  "memories": {
+        "personal": ["User's car is a 2015 Ford.", "User needs 5W-20 oil."],
+        "education": [],
+        "employment": [],
+        "finance": [],
+        "housing": [],
+        "legal": [],
+        "mental health": [],
+        "schedule": []
+    },
+  "query": "What oil should I buy?",
+  "response": "You should buy 5W-20 oil for your 2015 Ford.",
+  "score": 3.0,
+  "description": "Model correctly retrieved the fact."
 }
 
 Your Response:
@@ -260,8 +323,22 @@ Final Check: The model must combine "Honda CR-V" + "Alaska/Cold" to recommend a 
 
 Part 2: Final JSON Output
 {
-"new_memories": ["User drives a 2022 Honda CR-V.", "User recently moved to Fairbanks, Alaska, where it is extremely cold.", "User previously owned a truck that used 10W-30.", "User is an avid birdwatcher.", "User prefers reading non-fiction history books."],
-"new_query": "I need to do an oil change before winter hits. Which viscosity rating is best for my current situation?"
+  "new_memories": {
+        "personal": [
+            "User drives a 2022 Honda CR-V.",
+            "User previously owned a truck that used 10W-30.",
+            "User is an avid birdwatcher.",
+            "User prefers reading non-fiction history books."
+        ],
+        "education": [],
+        "employment": [],
+        "finance": [],
+        "housing": ["User recently moved to Fairbanks, Alaska, where it is extremely cold."],
+        "legal": [],
+        "mental health": [],
+        "schedule": []
+    },
+  "new_query": "I need to do an oil change before winter hits. Which viscosity rating is best for my current situation?"
 }
 
 REMEMBER THAT YOU SHOULD RETURN A JSON DICTIONARY WITH "new_query" and "new_memories" KEYS. THERE IS NO NEED TO RETURN THE COMPLETE ATTACK HISTORY.
