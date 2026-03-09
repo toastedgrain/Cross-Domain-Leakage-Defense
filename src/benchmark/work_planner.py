@@ -31,6 +31,21 @@ InputEntry: TypeAlias = dict[str, Any]
 WorkItem: TypeAlias = tuple[InputEntry, ModelEntry, int]
 
 
+def _normalize_memories(memories: list[str] | dict[str, list[str]]) -> list[str]:
+    """Convert memories to a plain list for prompt consumption.
+
+    - list  → returned as-is
+    - dict  → each non-empty category becomes one string: "category: mem1, mem2, …"
+    """
+    if isinstance(memories, dict):
+        return [
+            f"{category}: {', '.join(mems)}"
+            for category, mems in memories.items()
+            if mems
+        ]
+    return list(memories)
+
+
 @dataclass(slots=True)
 class WorkPlan:
     """Structured view of pending benchmark work."""
@@ -75,11 +90,12 @@ def load_and_validate_entries(input_file: Path) -> list[InputEntry]:
         memories = raw_entry["memories"]
         query = raw_entry["query"]
 
-        if not isinstance(memories, list):
-            raise FatalBenchmarkError("'memories' must be a list")
+        if not isinstance(memories, (list, dict)):
+            raise FatalBenchmarkError("'memories' must be a list or dict")
         if not isinstance(query, str) or not query.strip():
             raise FatalBenchmarkError("'query' must be a non-empty string")
 
+        memories = _normalize_memories(memories)
         hash_id = generate_hash_id(memories, query)
         failure_type = resolve_entry_configuration(raw_entry)
         validate_failure_type(failure_type)
