@@ -9,9 +9,19 @@
         "temperature": 0.2,
         "max_output_tokens": 1024
       }
+    },
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "temperature": 0.2,
+        "max_output_tokens": 1024
+      }
     }
   ],
-  "judge_model": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
   "judge_provider": "vertexai",
   "input": "benchmark_samples/cross_domain.jsonl",
   "output": "outputs/vertex_test.json",
