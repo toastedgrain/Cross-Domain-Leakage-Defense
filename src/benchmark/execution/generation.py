@@ -1,4 +1,4 @@
-"""Generation executors for benchmark workflow."""
+﻿"""Generation executors for benchmark workflow."""
 
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ from benchmark.config import (
 from benchmark.exceptions import FatalBenchmarkError
 from benchmark.types import GenerationEntry
 from benchmark.prompts import build_generation_prompt
+from benchmark.memory_tree import filter_memories_for_query
 from benchmark.provider_registry import PROVIDERS, get_batch_provider
 from benchmark.protocols import (
     BatchGenerateFn,
@@ -120,6 +121,7 @@ class SequentialGenerationExecutor:
                     task,
                     prompt_template,
                     store_raw_api_responses=config.store_raw_api_responses,
+                    memory_mode=config.memory_mode,
                 )
                 await _save_generation_result(
                     checkpoint_writer=checkpoint_writer,
@@ -206,6 +208,7 @@ async def _process_generation_task(
     task: GenerationTask,
     prompt_template: str | None = None,
     store_raw_api_responses: bool = False,
+    memory_mode: str = "full_profile",
 ) -> GenerationResult:
     provider_name = task.model.provider
     if provider_name not in PROVIDERS:
@@ -220,11 +223,14 @@ async def _process_generation_task(
         )
 
     try:
+        memories = task.entry["memories"]
+        if memory_mode == "tree":
+            memories = filter_memories_for_query(memories, task.entry["query"])
         memory_response, memory_raw, error_msg = await _generate_model_response(
             task.model,
             generate_fn,
             task.entry["query"],
-            task.entry["memories"],
+            memories,
             prompt_template,
         )
 
@@ -634,3 +640,8 @@ async def _import_batch_generation_results(
 
     save_checkpoint(checkpoint, config.output)
     return stats
+
+
+
+
+
