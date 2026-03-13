@@ -1,4 +1,4 @@
-"""Generation executors for benchmark workflow."""
+﻿"""Generation executors for benchmark workflow."""
 
 from __future__ import annotations
 
@@ -228,6 +228,9 @@ async def _process_generation_task(
             memories = filter_memories_for_query(memories, task.entry["query"])
         elif memory_mode == "tree_v2":
             from benchmark.memory_tree_v2 import filter_memories_for_query
+            memories = filter_memories_for_query(memories, task.entry["query"])
+        elif memory_mode == "tree_v3":
+            from benchmark.memory_tree_v3 import filter_memories_for_query
             memories = filter_memories_for_query(memories, task.entry["query"])
         memory_response, memory_raw, error_msg = await _generate_model_response(
             task.model,
