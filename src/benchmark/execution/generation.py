@@ -1,4 +1,4 @@
-﻿"""Generation executors for benchmark workflow."""
+"""Generation executors for benchmark workflow."""
 
 from __future__ import annotations
 
@@ -26,7 +26,6 @@ from benchmark.config import (
 from benchmark.exceptions import FatalBenchmarkError
 from benchmark.types import GenerationEntry
 from benchmark.prompts import build_generation_prompt
-from benchmark.memory_tree import filter_memories_for_query
 from benchmark.provider_registry import PROVIDERS, get_batch_provider
 from benchmark.protocols import (
     BatchGenerateFn,
@@ -225,6 +224,10 @@ async def _process_generation_task(
     try:
         memories = task.entry["memories"]
         if memory_mode == "tree":
+            from benchmark.memory_tree import filter_memories_for_query
+            memories = filter_memories_for_query(memories, task.entry["query"])
+        elif memory_mode == "tree_v2":
+            from benchmark.memory_tree_v2 import filter_memories_for_query
             memories = filter_memories_for_query(memories, task.entry["query"])
         memory_response, memory_raw, error_msg = await _generate_model_response(
             task.model,
@@ -640,8 +643,3 @@ async def _import_batch_generation_results(
 
     save_checkpoint(checkpoint, config.output)
     return stats
-
-
-
-
-
