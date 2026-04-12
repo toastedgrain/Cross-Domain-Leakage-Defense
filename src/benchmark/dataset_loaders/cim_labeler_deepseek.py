@@ -568,7 +568,10 @@ def load_labels_file(labels_path: str | Path) -> dict[str, str | None]:
         raise FileNotFoundError(f"Labels file not found: {path}")
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return data.get("labels", {})
+    # Normalise DeepSeek labeler vocabulary ('necessary'/'inappropriate') to the
+    # canonical vocabulary ('share'/'private') promised by this function's docstring.
+    _vocab = {"necessary": "share", "inappropriate": "private"}
+    return {k: _vocab.get(v, v) for k, v in data.get("labels", {}).items()}
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
