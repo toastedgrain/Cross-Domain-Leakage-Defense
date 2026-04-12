@@ -1,0 +1,29 @@
+{   
+    "models": [
+      {
+        "name": "meta/llama-3.3-70b-instruct-maas",
+        "provider": "vertexai",
+        "mode": "sequential",
+        "api_params": 
+        {
+          "location": "us-central1", "max_output_tokens": 1024
+        },
+          "input": "benchmark_samples/CIM/partitioned/llama3p3_70b/cim.jsonl"
+        }
+    ],
+
+    "judge_model": "moonshotai/kimi-k2-thinking-maas",
+    "judge_provider": "vertexai",
+    "judge_api_params": {
+    "temperature": 0
+    },
+
+    "concurrency": 50,
+    "dataset": "cim",
+    "method": "partitioned",
+    "prompt_template": "prompts/cim_paper.txt",
+    "memory_mode": "full_profile",
+    "cim_labels_file": "outputs/CIM/cim_labels_deepseek.json",
+    "input": "benchmark_samples/full_benchmark.jsonl",
+    "output": "test_cim_baseline_llama3p3.json"
+  }
