@@ -1,12 +1,13 @@
 {
   "input": "benchmark_samples/full_benchmark.jsonl",
-  "output": "outputs/CIM/cim_paper_replication_kimi.json",
+  "output": "outputs/CIM/deepseekV3p2_labeled/baseline/cim_paper_replication_kimi.json",
   "dataset": "cim",
   "prompt_template": "prompts/cim_paper.txt",
   "memory_mode": "full_profile",
-  "cim_labels_file": "outputs/CIM/cim_labels.json",
+  "cim_labels_file": "outputs/CIM/cim_labels_deepseek.json",
   "judge_provider": "vertexai",
-  "concurrency": 5,
+  "judge_model_name": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 2,
   "models": [
     {
       "name": "meta/llama-3.3-70b-instruct-maas",
