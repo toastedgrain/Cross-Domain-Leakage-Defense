@@ -23,20 +23,20 @@ from benchmark.metrics_cim import compute_cim_metrics  # noqa: E402
 # Each strategy maps to a dict of judge_name → checkpoint path (relative to repo root).
 STRATEGIES: dict[str, dict[str, str]] = {
     "Baseline": {
-        "Gemini 2.5 Flash": "outputs/CIM/baseline/cim_paper_replication_gemini.json",
-        "Kimi K2":          "outputs/CIM/baseline/cim_paper_replication_kimi.json",
+        "Gemini 2.5 Flash": "outputs/CIM/llama3p3_labeled/baseline/cim_paper_replication_gemini.json",
+        "Kimi K2":          "outputs/CIM/llama3p3_labeled/baseline/cim_paper_replication_kimi.json",
     },
     "Defense Medium": {
-        "Gemini 2.5 Flash": "outputs/CIM/defense/cim_defense_medium_gemini.json",
-        "Kimi K2":          "outputs/CIM/defense/cim_defense_medium_kimi.json",
+        "Gemini 2.5 Flash": "outputs/CIM/llama3p3_labeled/defense/cim_defense_medium_gemini.json",
+        "Kimi K2":          "outputs/CIM/llama3p3_labeled/defense/cim_defense_medium_kimi.json",
     },
     "Defense High": {
-        "Gemini 2.5 Flash": "outputs/CIM/defense/cim_defense_high_gemini.json",
-        "Kimi K2":          "outputs/CIM/defense/cim_defense_high_kimi.json",
+        "Gemini 2.5 Flash": "outputs/CIM/llama3p3_labeled/defense/cim_defense_high_gemini.json",
+        "Kimi K2":          "outputs/CIM/llama3p3_labeled/defense/cim_defense_high_kimi.json",
     },
     "Partitioned": {
-        "Gemini 2.5 Flash": "outputs/CIM/partitioned/cim_partitioned_gemini.json",
-        "Kimi K2":          "outputs/CIM/partitioned/cim_partitioned_kimi.json",
+        "Gemini 2.5 Flash": "outputs/CIM/llama3p3_labeled/partitioned/cim_partitioned_gemini.json",
+        "Kimi K2":          "outputs/CIM/llama3p3_labeled/partitioned/cim_partitioned_kimi.json",
     },
 }
 
