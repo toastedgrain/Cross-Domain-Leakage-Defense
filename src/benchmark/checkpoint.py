@@ -23,6 +23,12 @@ from benchmark.protocols import BatchJobInfo
 Checkpoint: TypeAlias = dict[str, Any]
 
 BENCHMARK_NAME = "PersistBench"
+BENCHMARK_NAME_CIM = "CIM"
+
+
+def _resolve_benchmark_name(config: BenchmarkConfig) -> str:
+    """Map the active dataset to the checkpoint benchmark name."""
+    return BENCHMARK_NAME_CIM if config.dataset == "cim" else BENCHMARK_NAME
 
 
 class GenerationStatus(Enum):
@@ -279,8 +285,8 @@ def initialize_checkpoint(
     existing_batch_jobs = previous_metadata.get("batch_jobs")
 
     # Resolve judge model name: config override > provider default
-    if config.judge_model_name:
-        current_judge_model = config.judge_model_name
+    if config.judge_model:
+        current_judge_model = config.judge_model
     elif judge_provider == "openrouter":
         current_judge_model = JUDGE_MODEL_OPENROUTER
     elif judge_provider == "gemini":
@@ -304,7 +310,7 @@ def initialize_checkpoint(
                 )
 
     checkpoint["metadata"] = {
-        "benchmark_name": BENCHMARK_NAME,
+        "benchmark_name": _resolve_benchmark_name(config),
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_entries": len(input_entries),
         "models": [
