@@ -1,0 +1,8 @@
+TODO
+remove redudent queries from cim samples
+look into deepseek labeling, fix format and voting
+
+Done:
+fix persistbench partitioned_labeled
+fixt cim input tool, no need for cim_path
+fix cim output format to be consistent
