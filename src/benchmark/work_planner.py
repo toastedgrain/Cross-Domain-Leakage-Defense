@@ -35,7 +35,7 @@ def _normalize_memories(memories: list[str] | dict[str, list[str]]) -> list[str]
     """Convert memories to a plain list for prompt consumption.
 
     - list  → returned as-is
-    - dict  → each non-empty category becomes one string: "category: mem1, mem2, …"
+    - dict  → each category becomes one string: "category: mem1, mem2, …"
     """
     if isinstance(memories, dict):
         return [
@@ -74,11 +74,22 @@ def load_input_file(file_path: Path) -> list[InputEntry]:
     return entries
 
 
-def load_and_validate_entries(input_file: Path) -> list[InputEntry]:
-    """Load, validate, and deduplicate entries from input file."""
+def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> list[InputEntry]:
+    """Load, validate, and deduplicate entries from input file.
+
+    When ``dataset='cim'``, failure_type is not read from the file — all entries
+    are treated as CIM automatically. ``task`` and ``recipient`` fields are mapped
+    to ``cim_task`` and ``cim_recipient`` so the generation prompt builder can fill
+    them in correctly.
+
+    When ``dataset='persistbench'`` (or None), the existing failure_type validation
+    logic applies.
+    """
     raw_entries = load_input_file(input_file)
     input_entries: list[dict[str, Any]] = []
-    seen_failure_types: dict[str, str] = {}
+    seen_hashes: set[str] = set()
+
+    is_cim = dataset == "cim"
 
     for i, raw_entry in enumerate(raw_entries):
         if not isinstance(raw_entry, dict):
@@ -95,26 +106,19 @@ def load_and_validate_entries(input_file: Path) -> list[InputEntry]:
             raise FatalBenchmarkError("'query' must be a non-empty string")
 
         memories = _normalize_memories(raw_memories)
-        # Use the hash_id already stored in the file (e.g. written by partition_memories.py
-        # from the original flat memories) so all models share one stable hash per sample.
-        # Fall back to computing from the normalized memories for plain input files.
         hash_id = raw_entry.get("hash_id") or generate_hash_id(memories, query)
-        failure_type = resolve_entry_configuration(raw_entry)
-        validate_failure_type(failure_type)
 
-        if hash_id in seen_failure_types:
-            prev_leak = seen_failure_types[hash_id]
-            if prev_leak != failure_type:
-                raise FatalBenchmarkError(
-                    f"Duplicate memories+query at index {i} with conflicting evaluation configuration.\n"
-                    f"Previous: failure_type={prev_leak}\n"
-                    f"Current: failure_type={failure_type}\n"
-                    f"The same memories+query cannot be evaluated with different configurations in one run.\n"
-                    f"Either remove the duplicate or use separate input files."
-                )
-            continue
+        if is_cim:
+            failure_type = "cim"
+            if hash_id in seen_hashes:
+                continue
+        else:
+            failure_type = resolve_entry_configuration(raw_entry)
+            validate_failure_type(failure_type)
+            if hash_id in seen_hashes:
+                continue
 
-        seen_failure_types[hash_id] = failure_type
+        seen_hashes.add(hash_id)
         entry_data = {
             "memories": memories,
             "query": query,
@@ -126,12 +130,14 @@ def load_and_validate_entries(input_file: Path) -> list[InputEntry]:
             entry_data["categorized_memories"] = {
                 category: list(items) for category, items in raw_memories.items()
             }
-        # Preserve CIM-specific fields so judges can evaluate them after JSONL load
-        if failure_type == "cim":
-            for key in ("required_attributes", "forbidden_attributes",
-                        "cim_metadata", "cim_task", "cim_recipient"):
+        if is_cim:
+            for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
+                        "attribute_memory_map"):
                 if key in raw_entry:
                     entry_data[key] = raw_entry[key]
+            # Prefer explicit cim_task/cim_recipient; fall back to task/recipient
+            entry_data["cim_task"] = raw_entry.get("cim_task") or raw_entry.get("task")
+            entry_data["cim_recipient"] = raw_entry.get("cim_recipient") or raw_entry.get("recipient")
         input_entries.append(entry_data)
 
     if not input_entries:
@@ -203,15 +209,9 @@ def _hydrate_checkpoint_entry(
         # Preserve CIM-specific fields so checkpoint resume keeps them
         if resolved_leak == "cim":
             for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
-                        "cim_task", "cim_recipient"):
+                        "cim_task", "cim_recipient", "attribute_memory_map"):
                 if key in entry:
                     entry_data[key] = entry[key]
-        # Persist model affinity (partitioned mode) as a sorted list for JSON compatibility
-        if "model_affinity" in entry:
-            entry_data["model_affinity"] = sorted(entry["model_affinity"])
-        # Persist per-model memories (partitioned mode) keyed by model name
-        if "model_memories" in entry:
-            entry_data["model_memories"] = entry["model_memories"]
         checkpoint["entries"][hash_id] = entry_data
         return
 
@@ -230,12 +230,6 @@ def _hydrate_checkpoint_entry(
                 f"  2. Delete the checkpoint file at {output_file} to start fresh"
             )
         checkpoint["entries"][hash_id]["failure_type"] = new_leak
-
-    # Merge any new per-model memories (e.g. a new model added on resume)
-    if "model_memories" in entry:
-        stored_mm = existing_entry.setdefault("model_memories", {})
-        for model_name, mems in entry["model_memories"].items():
-            stored_mm.setdefault(model_name, mems)
 
 
 def _queue_generations_for_entry(
@@ -313,15 +307,10 @@ def extract_entries_from_checkpoint(checkpoint: Checkpoint) -> list[InputEntry]:
             "failure_type": entry_data.get("failure_type"),
         }
         # Restore CIM-specific fields persisted by _hydrate_checkpoint_entry
-        for key in ("required_attributes", "forbidden_attributes", "cim_metadata"):
+        for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
+                    "cim_task", "cim_recipient", "attribute_memory_map"):
             if key in entry_data:
                 entry[key] = entry_data[key]
-        # Restore model affinity for partitioned mode
-        if "model_affinity" in entry_data:
-            entry["model_affinity"] = set(entry_data["model_affinity"])
-        # Restore per-model memories for partitioned mode
-        if "model_memories" in entry_data:
-            entry["model_memories"] = entry_data["model_memories"]
         entries.append(entry)
     return entries
 

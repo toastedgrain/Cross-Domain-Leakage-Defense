@@ -60,11 +60,6 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Automatically rerun failed benchmarks with reduced concurrency (up to 3 retries). Use --no-auto-rerun to disable.",
     )
     parser.add_argument(
-        "--judge-provider",
-        choices=["vertexai", "openrouter", "gemini"],
-        help="Judge provider (overrides config and env var). Default: openrouter",
-    )
-    parser.add_argument(
         "--concurrency",
         type=int,
         help="Number of concurrent requests (overrides config file setting)",
@@ -78,25 +73,9 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     )
     parser.add_argument(
         "--dataset",
-        choices=["persistbench", "cim", "both"],
+        type=str,
         default=None,
-        help="Dataset to evaluate: persistbench, cim, or both (default: persistbench)",
-    )
-    parser.add_argument(
-        "--memory-mode",
-        choices=["none", "relevant_only", "mixed", "full_profile"],
-        default=None,
-        help="Memory mode for CIM dataset (default: full_profile)",
-    )
-    parser.add_argument(
-        "--cim-path",
-        default=None,
-        help="HuggingFace dataset ID or local path for CIM dataset",
-    )
-    parser.add_argument(
-        "--cim-labels",
-        default=None,
-        help="Path to pre-computed CIM labels file (from `benchmark cim-label`)",
+        help="Dataset to evaluate: PersistBench or CIM (case-insensitive, default from config)",
     )
     parser.add_argument(
         "--cim-judge-variant",
@@ -104,32 +83,6 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
         default=None,
         help="CIM judge variant: 'default' (legacy), 'reveal_paper_compat' (REVEAL metric), or 'reveal_official' (official CIMemories REVEAL). Default: reveal_paper_compat",
     )
-    parser.add_argument(
-        "--auto-label",
-        action="store_true",
-        default=False,
-        help="Automatically generate CIM labels (via cim-label) before running the benchmark "
-        "if no --cim-labels file is provided or the file doesn't exist. "
-        "Enables a single-command CIM benchmark run.",
-    )
-    parser.add_argument(
-        "--generator-model",
-        default=None,
-        help="Override generator model name",
-    )
-    parser.add_argument(
-        "--judge-model",
-        default=None,
-        help="Override judge model name",
-    )
-    parser.add_argument(
-        "--provider",
-        choices=["openrouter", "gemini"],
-        default=None,
-        help="Provider for generator/judge models (default: openrouter)",
-    )
-
-
 def _exit_code_for_subcommand(stats, *, subcommand: str) -> int:
     """Compute CLI exit code based on mode-specific completion criteria."""
     if subcommand == "generate":
@@ -148,40 +101,6 @@ async def _handle(args: argparse.Namespace) -> int:
     skip_generation = subcommand == "judge"
     skip_judge = subcommand == "generate"
 
-    # Auto-label: generate CIM labels if needed before running the benchmark
-    cim_labels = args.cim_labels
-    effective_dataset = args.dataset
-    if effective_dataset is None:
-        # Check config file for dataset setting
-        from pathlib import Path as _Path
-        import orjson
-        _cfg_path = _Path(args.file)
-        if _cfg_path.exists():
-            try:
-                _cfg_data = orjson.loads(_cfg_path.read_bytes())
-                if isinstance(_cfg_data, dict) and "entries" not in _cfg_data:
-                    effective_dataset = _cfg_data.get("dataset", "persistbench")
-            except Exception:
-                pass
-
-    is_cim = effective_dataset in ("cim", "both")
-    if is_cim and args.auto_label and not cim_labels:
-        from pathlib import Path as _Path
-        from benchmark.dataset_loaders.cim_labeler import LabelingConfig, run_labeling
-
-        default_labels_path = _Path("outputs/cim_labels.json")
-        if not default_labels_path.exists():
-            print("\n--- Auto-labeling CIM attributes ---")
-            label_config = LabelingConfig(
-                dataset_id=args.cim_path or "facebook/CIMemories",
-            )
-            labels_path = await run_labeling(label_config)
-            cim_labels = str(labels_path)
-            print(f"--- Auto-labeling complete: {labels_path} ---\n")
-        else:
-            print(f"Using existing labels file: {default_labels_path}")
-            cim_labels = str(default_labels_path)
-
     stats = await run_benchmark_with_retry(
         file_path=args.file,
         dry_run=args.dry_run,
@@ -191,17 +110,10 @@ async def _handle(args: argparse.Namespace) -> int:
         skip_generation=skip_generation,
         batch_poll_timeout_minutes=args.batch_poll_timeout,
         retry_enabled=args.auto_rerun,
-        judge_provider=args.judge_provider,
         concurrency_override=args.concurrency,
         store_raw_api_responses=args.store_raw_api_responses,
         dataset=args.dataset,
-        memory_mode=args.memory_mode,
-        cim_path=args.cim_path,
-        cim_labels=cim_labels,
         cim_judge_variant=args.cim_judge_variant,
-        generator_model=args.generator_model,
-        judge_model=args.judge_model,
-        provider=args.provider,
     )
     return _exit_code_for_subcommand(stats, subcommand=subcommand)
 
@@ -250,7 +162,6 @@ async def main_async() -> int:
 
             Example:
               benchmark judge output.json
-              benchmark judge output.json --judge-provider openrouter --concurrency 20
         """),
     )
     _add_arguments(judge_parser)

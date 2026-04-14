@@ -1,6 +1,7 @@
 """Batch LLM generation and judge evaluation tool."""
 
 import asyncio
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, TypeAlias
 
@@ -35,7 +36,6 @@ from benchmark.execution.generation import (
 from benchmark.execution.judgment import (
     SequentialJudgmentExecutor,
     build_judgment_tasks,
-    get_judge_provider,
     set_cim_judge_variant,
     set_judge_model,
     set_judge_provider,
@@ -47,7 +47,6 @@ from benchmark.work_planner import (
     load_and_validate_entries,
     prepare_work_plan,
     reconstruct_config,
-    samples_to_input_entries,
 )
 
 Checkpoint: TypeAlias = dict[str, Any]
@@ -191,90 +190,119 @@ def _prepare_benchmark_execution(
     return work_plan.checkpoint, work_plan.pending_work
 
 
-def _load_cim_entries(config: BenchmarkConfig) -> list[InputEntry]:
-    """Load entries from CIM dataset."""
-    from benchmark.dataset_loaders.cim import CIMDataset
+def _merge_partitioned_entries(
+    config: BenchmarkConfig,
+    load_model_file: Callable[[Path], list[InputEntry]],
+    *,
+    label_memories: bool,
+) -> list[InputEntry]:
+    """Merge per-model entries into a unified entry map with affinity and memory sets.
 
-    dataset_id = config.cim_path or "facebook/CIMemories"
-    cim_dataset = CIMDataset(
-        dataset_id=dataset_id,
-        memory_mode=config.memory_mode,
-        labels_file=config.cim_labels_file,
-    )
-    samples = list(cim_dataset)
-    print(f"Loaded {len(samples)} samples from CIM dataset ({dataset_id})")
-    return samples_to_input_entries(samples, dataset="cim")
-
-
-def _load_partitioned_entries(config: BenchmarkConfig) -> list[InputEntry]:
-    """Load entries per model and merge them with model affinity tags (partitioned mode).
-
-    Each entry records which models should process it via a 'model_affinity' set.
-    Entries that appear in multiple models' input files are merged and both model
-    names are added to their affinity set.
+    ``load_model_file`` is called for each model's input file and must return fully-
+    formed ``InputEntry`` dicts. When ``label_memories=True`` memories are formatted
+    as ``'Category: memory'`` strings using ``categorized_memories`` when available.
     """
-    merged: dict[str, InputEntry] = {}  # hash_id -> entry
-
+    merged: dict[str, InputEntry] = {}
     for model in config.models:
         model_input = model.input or config.input
-        model_entries = load_and_validate_entries(model_input)
-        for entry in model_entries:
+        for entry in load_model_file(model_input):
             hash_id = entry["hash_id"]
+            if label_memories:
+                cat_mems = entry.get("categorized_memories")
+                model_mems: list[str] = (
+                    [f"{cat}: {mem}" for cat, items in cat_mems.items() for mem in items]
+                    if cat_mems is not None
+                    else list(entry["memories"])
+                )
+            else:
+                model_mems = list(entry["memories"])
             if hash_id in merged:
                 merged[hash_id]["model_affinity"].add(model.name)
-                # Store this model's (possibly different) memories separately so
-                # generation can use the right memories for each model.
-                merged[hash_id].setdefault("model_memories", {})[model.name] = entry["memories"]
+                merged[hash_id]["model_memories"][model.name] = model_mems
             else:
                 entry["model_affinity"] = {model.name}
-                entry["model_memories"] = {model.name: entry["memories"]}
+                entry["model_memories"] = {model.name: model_mems}
                 merged[hash_id] = entry
 
+    mode = "partitioned-labeled" if label_memories else "partitioned"
     entries = list(merged.values())
-    print(f"Partitioned mode: {len(entries)} unique entries across {len(config.models)} model(s)")
+    print(f"{mode.capitalize()} mode: {len(entries)} unique entries across {len(config.models)} model(s)")
     return entries
 
 
-def _load_partitioned_labeled_entries(config: BenchmarkConfig) -> list[InputEntry]:
-    """Load entries per model with one labeled line per memory, grouped by category.
+def _merge_partitioned_cim_entries(
+    config: BenchmarkConfig,
+    *,
+    label_memories: bool,
+) -> list[InputEntry]:
+    """CIM partitioned loader.
 
-    Like partitioned mode, but memories are pre-formatted as a flat list of
-    ``"Category: memory"`` strings (one per memory, grouped by category) instead
-    of a dict.  Because the list is passed through _format_generation_memories
-    unchanged (no shuffle), the model sees memories in category order:
-
-        Category1: memory1
-        Category1: memory2
-        Category2: memory1
-        ...
+    Entry metadata (task, recipient, attrs, hash_id, rendered query) and base
+    memories always come from ``config.input``. ``model.input`` overrides only
+    the memories for that model (matched by hash_id); if absent or identical to
+    ``config.input``, the base memories are used for that model too.
     """
-    merged: dict[str, InputEntry] = {}  # hash_id -> entry
+    base_entries = load_and_validate_entries(config.input, dataset="cim")
+    base_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in base_entries}
 
+    merged: dict[str, InputEntry] = {}
     for model in config.models:
-        model_input = model.input or config.input
-        model_entries = load_and_validate_entries(model_input)
-        for entry in model_entries:
-            hash_id = entry["hash_id"]
-            cat_mems = entry.get("categorized_memories")
-            if cat_mems is not None:
-                model_memories: list[str] = [
-                    f"{category}: {memory}"
-                    for category, items in cat_mems.items()
-                    for memory in items
-                ]
+        if model.input is not None and model.input != config.input:
+            mem_entries = load_and_validate_entries(model.input, dataset="cim")
+            mem_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in mem_entries}
+        else:
+            mem_by_hash = base_by_hash
+
+        for hash_id, base_entry in base_by_hash.items():
+            source = mem_by_hash.get(hash_id, base_entry)
+            if label_memories:
+                cat_mems = source.get("categorized_memories")
+                model_mems: list[str] = (
+                    [f"{cat}: {mem}" for cat, items in cat_mems.items() for mem in items]
+                    if cat_mems is not None
+                    else list(source["memories"])
+                )
             else:
-                model_memories = list(entry["memories"])
+                model_mems = list(source["memories"])
+
             if hash_id in merged:
                 merged[hash_id]["model_affinity"].add(model.name)
-                merged[hash_id].setdefault("model_memories", {})[model.name] = model_memories
+                merged[hash_id]["model_memories"][model.name] = model_mems
             else:
+                entry = dict(base_entry)
                 entry["model_affinity"] = {model.name}
-                entry["model_memories"] = {model.name: model_memories}
+                entry["model_memories"] = {model.name: model_mems}
                 merged[hash_id] = entry
 
+    mode = "partitioned-labeled" if label_memories else "partitioned"
     entries = list(merged.values())
-    print(f"Partitioned-labeled mode: {len(entries)} unique entries across {len(config.models)} model(s)")
+    print(f"CIM {mode} mode: {len(entries)} entries across {len(config.models)} model(s)")
     return entries
+
+
+def _load_dataset_entries(config: BenchmarkConfig, effective_dataset: str) -> list[InputEntry]:
+    """Load entries for the given dataset, dispatching on dataset → method.
+
+    For CIM partitioned modes, metadata always comes from ``config.input`` and
+    per-model memories come from ``model.input``. For PersistBench, each model's
+    file is loaded in full. For no-method (baseline), the standard loaders are used.
+    """
+    if effective_dataset == "cim":
+        if config.method == "partitioned":
+            return _merge_partitioned_cim_entries(config, label_memories=False)
+        elif config.method == "partitioned_labeled":
+            return _merge_partitioned_cim_entries(config, label_memories=True)
+        return load_and_validate_entries(config.input, dataset="cim")
+    elif effective_dataset == "persistbench":
+        if config.method == "partitioned":
+            return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=False)
+        elif config.method == "partitioned_labeled":
+            return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=True)
+        return load_and_validate_entries(config.input)
+    else:
+        raise FatalBenchmarkError(
+            f"Invalid dataset '{effective_dataset}'. Valid values: PersistBench or CIM."
+        )
 
 
 def _load_from_file(
@@ -297,34 +325,22 @@ def _load_from_file(
     if is_checkpoint:
         checkpoint = data
         config = reconstruct_config(checkpoint, file_path)
-        entries = extract_entries_from_checkpoint(checkpoint)
+        if config.method in ("partitioned", "partitioned_labeled"):
+            # Re-load from input files so entries carry model_affinity/model_memories
+            # (those fields are not persisted in the checkpoint to keep output clean)
+            effective_dataset = dataset_override or config.dataset
+            entries = _load_dataset_entries(config, effective_dataset)
+        else:
+            entries = extract_entries_from_checkpoint(checkpoint)
         is_fresh_config = False
         print(f"Resuming from checkpoint: {file_path} ({len(entries)} entries)")
     else:
         if config is None:
             config = load_benchmark_config_data(data, config_path=file_path)
 
-        # Determine effective dataset
         effective_dataset = dataset_override or config.dataset
-
-        if effective_dataset == "both":
-            pb_entries = load_and_validate_entries(config.input)
-            cim_entries = _load_cim_entries(config)
-            entries = pb_entries + cim_entries
-            print(
-                f"Combined dataset: {len(pb_entries)} PersistBench + "
-                f"{len(cim_entries)} CIM = {len(entries)} total entries"
-            )
-        elif config.method == "partitioned":
-            entries = _load_partitioned_entries(config)
-        elif config.method == "partitioned_labeled":
-            entries = _load_partitioned_labeled_entries(config)
-        elif effective_dataset == "cim":
-            entries = _load_cim_entries(config)
-        else:
-            entries = load_and_validate_entries(config.input)
+        entries = _load_dataset_entries(config, effective_dataset)
         is_fresh_config = True
-        # Config-level limit applies only when loading fresh from config
         if limit is None:
             limit = config.limit
 
@@ -344,16 +360,9 @@ async def run_benchmark(
     skip_generation: bool = False,
     batch_poll_timeout_minutes: int | None = None,
     concurrency_override: int | None = None,
-    judge_provider: str | None = None,
     store_raw_api_responses: bool | None = None,
     dataset: str | None = None,
-    memory_mode: str | None = None,
-    cim_path: str | None = None,
-    cim_labels: str | None = None,
     cim_judge_variant: str | None = None,
-    generator_model: str | None = None,
-    judge_model: str | None = None,
-    provider: str | None = None,
 ) -> BenchmarkStats:
     """Run benchmark workflow from a config file or checkpoint file.
 
@@ -363,14 +372,8 @@ async def run_benchmark(
         file_path: Path to config file or checkpoint file.
         skip_generation: Skip generation phase (judge-only mode).
         skip_judge: Skip judgment phase (generation-only mode).
-        judge_provider: Override judge provider (CLI > config > env > default).
-        dataset: Override dataset type ('persistbench', 'cim', or 'both').
-        memory_mode: Override CIM memory mode.
-        cim_path: Override CIM dataset path/ID.
+        dataset: Override dataset type ('PersistBench' or 'CIM').
         cim_judge_variant: CIM judge variant ('default' or 'reveal_paper_compat').
-        generator_model: Override generator model name.
-        judge_model: Override judge model name.
-        provider: Override provider for generator/judge.
 
     Returns:
         Benchmark stats for this run/checkpoint.
@@ -382,47 +385,41 @@ async def run_benchmark(
     pre_config: BenchmarkConfig | None = None
     if not is_checkpoint:
         pre_config = load_benchmark_config_data(data, config_path=path)
-        # Apply dataset-related CLI overrides before entry loading
         if dataset is not None:
             pre_config.dataset = dataset
-        if memory_mode is not None:
-            pre_config.memory_mode = memory_mode
-        if cim_path is not None:
-            pre_config.cim_path = cim_path
-        if cim_labels is not None:
-            pre_config.cim_labels_file = cim_labels
         if cim_judge_variant is not None:
             pre_config.cim_judge_variant = cim_judge_variant
-        if generator_model is not None:
-            pre_config.generator_model = generator_model
-        if provider is not None:
-            pre_config.provider = provider
+
+        # Re-run validation/loading so dataset overrides can resolve their
+        # prompt template defaults and the final config stays normalized.
+        config_data = pre_config.model_dump(mode="python")
+        config_data["prompt_template_content"] = None
+        pre_config = load_benchmark_config_data(config_data, config_path=path)
 
     entries, config, is_fresh_config, existing_checkpoint = _load_from_file(
         path, limit=limit, dataset_override=dataset, config=pre_config
     )
 
-    # Apply CLI overrides before capturing config_dict
     if store_raw_api_responses is not None:
         config.store_raw_api_responses = store_raw_api_responses
 
-    if generator_model is not None:
-        config.generator_model = generator_model
-    if judge_model is not None:
-        config.judge_model_name = judge_model
-    if provider is not None:
-        config.provider = provider
+    if config.judge_model is None:
+        raise FatalBenchmarkError(
+            "Config must set 'judge_model' for benchmark runs."
+        )
+    if config.judge_provider is None:
+        raise FatalBenchmarkError(
+            "Config must set 'judge_provider' for benchmark runs."
+        )
 
-    # Set judge model override
-    set_judge_model(config.judge_model_name)
+    # Set judge model and provider from config only.
+    set_judge_model(config.judge_model)
 
     # Set CIM judge variant
     set_cim_judge_variant(config.cim_judge_variant)
 
-    # Resolve judge provider: CLI > config > env > default (openrouter)
-    set_judge_provider(judge_provider or config.judge_provider)
-    resolved_provider = get_judge_provider()
-    config.judge_provider = resolved_provider
+    set_judge_provider(config.judge_provider)
+    resolved_provider = config.judge_provider
 
     if batch_poll_timeout_minutes is not None:
         config.batch_poll_timeout_minutes = batch_poll_timeout_minutes
@@ -546,17 +543,10 @@ async def run_benchmark_with_retry(
     skip_generation: bool = False,
     batch_poll_timeout_minutes: int | None = None,
     retry_enabled: bool = False,
-    judge_provider: str | None = None,
     concurrency_override: int | None = None,
     store_raw_api_responses: bool | None = None,
     dataset: str | None = None,
-    memory_mode: str | None = None,
-    cim_path: str | None = None,
-    cim_labels: str | None = None,
     cim_judge_variant: str | None = None,
-    generator_model: str | None = None,
-    judge_model: str | None = None,
-    provider: str | None = None,
 ) -> BenchmarkStats:
     """Run benchmark with optional run-level retry on failures.
 
@@ -575,16 +565,9 @@ async def run_benchmark_with_retry(
         skip_judge=skip_judge,
         skip_generation=skip_generation,
         batch_poll_timeout_minutes=batch_poll_timeout_minutes,
-        judge_provider=judge_provider,
         store_raw_api_responses=store_raw_api_responses,
         dataset=dataset,
-        memory_mode=memory_mode,
-        cim_path=cim_path,
-        cim_labels=cim_labels,
         cim_judge_variant=cim_judge_variant,
-        generator_model=generator_model,
-        judge_model=judge_model,
-        provider=provider,
     )
 
     if not retry_enabled:

@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
@@ -47,14 +48,10 @@ TEMPERATURE    = 0
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
 CONCURRENCY     = 7    # max simultaneous API requests
 MAX_RETRIES     = 5    # retry attempts per sample on parse / API failure
-_PROJECT_ROOT   = Path(__file__).resolve().parent.parent  # repo root
-CIM_DATASET_ID  = "facebook/CIMemories"
-CIM_LABELS_FILES = (
-    _PROJECT_ROOT / "outputs" / "CIM" / "cim_labels.json",
-    _PROJECT_ROOT / "outputs" / "cim_labels.json",
-    _PROJECT_ROOT / "cim_labels.json",
-)
-OUTPUT_FILE     = _PROJECT_ROOT / "cim.jsonl"
+MAX_PERSONAS    = None  # max number of personas to process (None = all)
+_PROJECT_ROOT   = Path(__file__).resolve().parent.parent.parent.parent.parent  # repo root
+CIM_INPUT_FILE = _PROJECT_ROOT / "benchmark_samples" / "CIM" / "baseline" / "cim_normalized.jsonl"
+OUTPUT_FILE    = _PROJECT_ROOT / "cim_partitioned_llama3p3.jsonl"
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── PROMPT ────────────────────────────────────────────────────────────────────
@@ -106,10 +103,9 @@ Return ONLY a single-line JSON object with the following keys in this exact orde
 # ── Internals (no need to edit below) ─────────────────────────────────────────
 
 import sys  # noqa: E402
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))  # add src/ so 'benchmark' is importable
+sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))  # add src/ so 'benchmark' is importable
 
 from benchmark.utils import extract_json_from_response, get_vertex_ai_client  # noqa: E402
-from benchmark.dataset_loaders.cim import CIMDataset  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
@@ -126,20 +122,16 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _resolve_labels_file() -> Path | None:
-    """Return the first existing default CIM labels file."""
-    for path in CIM_LABELS_FILES:
-        if path.exists():
-            return path
-    return None
+def _row_key(row: dict) -> str:
+    """Unique key for a single output row: name + task + recipient."""
+    return f"{row.get('name', '')}|{row.get('task', '')}|{row.get('recipient', '')}"
 
 
 def _load_checkpoint() -> tuple[set[str], dict[str, dict[str, list[str]]]]:
-    """Return (done_hash_ids, persona_partitions) from the existing output file.
+    """Return (done_keys, persona_partitions) from the existing output file.
 
-    In addition to tracking which sample hash_ids are already written, this
-    recovers the partition for each persona so that a resumed run does not need
-    to re-call the LLM for personas that were already (partially) written.
+    done_keys are 'name|task|recipient' strings.
+    persona_partitions maps persona name → recovered 11-category dict.
     """
     done: set[str] = set()
     persona_partitions: dict[str, dict[str, list[str]]] = {}
@@ -152,9 +144,8 @@ def _load_checkpoint() -> tuple[set[str], dict[str, dict[str, list[str]]]]:
                     continue
                 try:
                     row = json.loads(line)
-                    done.add(row["hash_id"])
-                    # Recover the partition for this persona (first row wins)
-                    name = row.get("cim_metadata", {}).get("name")
+                    done.add(_row_key(row))
+                    name = row.get("name")
                     if name and name not in persona_partitions:
                         persona_partitions[name] = row["memories"]
                 except (json.JSONDecodeError, KeyError):
@@ -225,81 +216,94 @@ async def _classify(
     return fallback
 
 
-def _build_sample_row(sample, partition: dict[str, list[str]]) -> dict:
-    """Build the output JSONL row for a single sample."""
-    result: dict = {
-        "query": sample.prompt,
+def _make_hash_id(name: str, task: str, recipient: str) -> str:
+    """Stable hash matching cim_normalize.py — keyed on name + task + recipient."""
+    return hashlib.md5(
+        json.dumps(
+            {"name": name, "task": task, "recipient": recipient},
+            ensure_ascii=False,
+            sort_keys=True,
+        ).encode()
+    ).hexdigest()
+
+
+def _build_sample_row(raw_row: dict, partition: dict[str, list[str]]) -> dict:
+    """Build the output JSONL row for a single sample.
+
+    Mirrors the cim_normalized.jsonl format exactly, replacing the flat
+    'memories' list with the 11-category partition dict.
+    hash_id uses the same formula as cim_normalize.py so baseline and
+    partitioned files share identical hashes for matching rows.
+    """
+    name = raw_row["name"]
+    task = raw_row["task"]
+    recipient = raw_row["recipient"]
+    return {
+        "name": name,
+        "query": raw_row["query"],
         "memories": partition,
-        "hash_id": sample.sample_id,
-        "failure_type": "cim",
-        "required_attributes": sample.required_attributes,
-        "forbidden_attributes": sample.forbidden_attributes,
-        "cim_metadata": sample.metadata,
+        "task": task,
+        "recipient": recipient,
+        "attribute_memory_map": raw_row.get("attribute_memory_map", {}),
+        "required_attributes": raw_row.get("required_attributes", []),
+        "forbidden_attributes": raw_row.get("forbidden_attributes", []),
+        "hash_id": raw_row.get("hash_id") or _make_hash_id(name, task, recipient),
     }
-    # Hoist top-level convenience fields that the benchmark runner expects
-    if "cim_task" in sample.metadata:
-        result["cim_task"] = sample.metadata["cim_task"]
-    if "cim_recipient" in sample.metadata:
-        result["cim_recipient"] = sample.metadata["cim_recipient"]
-    return result
 
 
 async def main() -> None:
     args = _parse_args()
 
-    labels_file = _resolve_labels_file()
-    if labels_file is None:
-        searched = ", ".join(str(path) for path in CIM_LABELS_FILES)
-        print(
-            "[WARN] CIM labels file not found. Looked in: "
-            f"{searched}. Falling back to HuggingFace label column."
-        )
+    # ── Load raw rows directly from normalized JSONL ─────────────────────────
+    print(f"Loading CIM dataset from {CIM_INPUT_FILE} ...")
+    raw_rows: list[dict] = []
+    with open(CIM_INPUT_FILE, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                raw_rows.append(json.loads(line))
+    print(f"Loaded {len(raw_rows)} CIM rows")
 
-    print(f"Loading CIM dataset from {CIM_DATASET_ID} ...")
-    cim_dataset = CIMDataset(
-        dataset_id=CIM_DATASET_ID,
-        memory_mode="full_profile",
-        labels_file=labels_file,
-    )
-    samples = list(cim_dataset)
-    print(f"Loaded {len(samples)} CIM samples")
-
-    # ── Group samples by persona ─────────────────────────────────────────────
-    persona_samples: dict[str, list] = defaultdict(list)
-    for s in samples:
-        persona_samples[s.metadata["name"]].append(s)
+    # ── Group rows by persona ────────────────────────────────────────────────
+    persona_rows: dict[str, list[dict]] = defaultdict(list)
+    for row in raw_rows:
+        persona_rows[row["name"]].append(row)
 
     # Apply persona filter from CLI
     if args.personas is not None:
         requested = set(args.personas)
-        available = set(persona_samples.keys())
+        available = set(persona_rows.keys())
         unknown = requested - available
         if unknown:
             print(f"[WARN] Unknown persona(s): {unknown}")
             print(f"       Available: {sorted(available)}")
-        persona_samples = {
-            name: samps for name, samps in persona_samples.items()
+        persona_rows = {
+            name: rows for name, rows in persona_rows.items()
             if name in requested
         }
 
-    if not persona_samples:
+    if not persona_rows:
         print("No personas to process.")
         return
 
-    total_samples = sum(len(samps) for samps in persona_samples.values())
+    if MAX_PERSONAS is not None:
+        persona_rows = dict(list(persona_rows.items())[:MAX_PERSONAS])
+        print(f"Limit: capped to {MAX_PERSONAS} persona(s)")
+
+    total_rows = sum(len(rows) for rows in persona_rows.values())
     print(
-        f"Processing {len(persona_samples)} persona(s), "
-        f"{total_samples} samples total"
+        f"Processing {len(persona_rows)} persona(s), "
+        f"{total_rows} rows total"
     )
 
     # ── Resume support ───────────────────────────────────────────────────────
-    done_ids, persona_partitions = _load_checkpoint()
-    print(f"Checkpoint: {len(done_ids)} samples written, "
+    done_keys, persona_partitions = _load_checkpoint()
+    print(f"Checkpoint: {len(done_keys)} rows written, "
           f"{len(persona_partitions)} persona partition(s) recovered")
 
     # ── Phase 1: Classify once per persona ───────────────────────────────────
     personas_to_classify = [
-        name for name in persona_samples
+        name for name in persona_rows
         if name not in persona_partitions
     ]
 
@@ -310,9 +314,9 @@ async def main() -> None:
         async with get_vertex_ai_client(MODEL_LOCATION) as client:
             classify_tasks = []
             for name in personas_to_classify:
-                # All samples for the same persona share identical memories
-                # in full_profile mode, so we use the first sample's list.
-                memories = persona_samples[name][0].memories
+                # All rows for the same persona share identical memories,
+                # so we use the first row's flat memory list.
+                memories = persona_rows[name][0]["memories"]
                 classify_tasks.append(_classify(client, memories, semaphore))
 
             results = await asyncio.gather(*classify_tasks)
@@ -326,20 +330,21 @@ async def main() -> None:
 
     # ── Phase 2: Write sample rows ───────────────────────────────────────────
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    counter = len(done_ids)
+    counter = len(done_keys)
 
     print(f"\nPhase 2: Writing sample rows ...")
     with open(OUTPUT_FILE, "a", encoding="utf-8") as out_file:
-        for name, samps in persona_samples.items():
+        for name, rows in persona_rows.items():
             partition = persona_partitions[name]
-            for sample in samps:
-                if sample.sample_id in done_ids:
+            for raw_row in rows:
+                if _row_key(raw_row) in done_keys:
                     continue
-                row = _build_sample_row(sample, partition)
-                out_file.write(json.dumps(row, ensure_ascii=False) + "\n")
+                out_row = _build_sample_row(raw_row, partition)
+                out_file.write(json.dumps(out_row, ensure_ascii=False) + "\n")
                 out_file.flush()
                 counter += 1
-                print(f"[{counter}/{total_samples}] {name}: {sample.prompt[:60]}...")
+                task_preview = raw_row.get("task", "")[:50]
+                print(f"[{counter}/{total_rows}] {name}: {task_preview}...")
 
     print(f"\nDone! {counter} rows saved to {OUTPUT_FILE}")
 

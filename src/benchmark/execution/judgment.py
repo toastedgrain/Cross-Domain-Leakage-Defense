@@ -543,7 +543,7 @@ async def evaluate_with_judge(
 
         if variant == "reveal_official":
             judge_system_prompt = ""  # official uses user message only
-            attr_map = entry.get("cim_metadata", {}).get("attribute_memory_map", {})
+            attr_map = entry.get("attribute_memory_map") or entry.get("cim_metadata", {}).get("attribute_memory_map", {})
             judge_user_msg = build_cim_official_judge_prompt(
                 attribute_memory_map=attr_map,
                 memory_response=memory_response,
@@ -551,7 +551,7 @@ async def evaluate_with_judge(
                 forbidden_attributes=entry.get("forbidden_attributes", []),
             )
         elif variant == "reveal_paper_compat":
-            attr_map = entry.get("cim_metadata", {}).get("attribute_memory_map", {})
+            attr_map = entry.get("attribute_memory_map") or entry.get("cim_metadata", {}).get("attribute_memory_map", {})
             judge_user_msg = build_cim_judge_prompt(
                 memories=entry["memories"],
                 query=entry["query"],

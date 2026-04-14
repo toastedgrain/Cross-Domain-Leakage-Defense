@@ -12,6 +12,9 @@ FAILURE_TYPE_CROSS_DOMAIN = "cross_domain"
 FAILURE_TYPE_SYCOPHANCY = "sycophancy"
 FAILURE_TYPE_BENEFICIAL = "beneficial_memory_usage"
 FAILURE_TYPE_CIM = "cim"
+DEFAULT_CIM_PROMPT_TEMPLATE = Path("prompts/cim_paper.txt")
+DEFAULT_DATASET = "PersistBench"
+VALID_DATASETS = {"persistbench", "cim"}
 
 VALID_FAILURE_TYPES = {
     FAILURE_TYPE_CROSS_DOMAIN,
@@ -102,7 +105,6 @@ class BenchmarkConfig(BaseModel):
     """Benchmark configuration schema."""
 
     models: list[ModelEntry] = Field(min_length=1)
-    judge: ModelEntry | None = None
     judge_provider: str | None = None
     input: Path
     output: Path
@@ -115,16 +117,10 @@ class BenchmarkConfig(BaseModel):
     prompt_template: Path | None = None
 
     # Dataset configuration
-    dataset: str = "persistbench"
-    memory_mode: str = "full_profile"
-    cim_path: str | None = None
-    cim_labels_file: str | None = None
+    dataset: str = DEFAULT_DATASET
     cim_judge_variant: str = "reveal_paper_compat"
 
-    # Model overrides
-    generator_model: str | None = None
-    judge_model_name: str | None = None
-    provider: str = "openrouter"
+    judge_model: str | None = None
 
     # Loaded template content (not part of JSON schema)
     prompt_template_content: str | None = None
@@ -180,7 +176,16 @@ def load_benchmark_config_data(
             f"Valid values: {sorted(VALID_JUDGE_PROVIDERS)}"
         )
 
+    if config.dataset not in VALID_DATASETS:
+        raise ValueError(
+            f"Invalid dataset '{config.dataset}' in config ({config_path}). "
+            f"Valid values: {sorted(VALID_DATASETS)}"
+        )
+
     # Load prompt template content if specified and not already provided (e.g. from checkpoint)
+    if config.dataset == "cim" and config.prompt_template is None:
+        config.prompt_template = DEFAULT_CIM_PROMPT_TEMPLATE
+
     if config.prompt_template and not config.prompt_template_content:
         template_path = Path(config.prompt_template)
         if not template_path.exists():
@@ -195,7 +200,7 @@ def load_benchmark_config_data(
     if (
         config.prompt_template_content
         and "{memories}" not in config.prompt_template_content
-        and config.dataset not in ("cim", "both")
+        and config.dataset != "cim"
     ):
         raise ValueError(
             "Prompt template must contain the {memories} placeholder. "

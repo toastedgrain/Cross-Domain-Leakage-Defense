@@ -131,16 +131,25 @@ def _extract_json(text: str) -> dict[str, Any]:
     raise ValueError(f"No JSON found in response: {text[:200]}")
 
 
+def _context_hash(task: str, recipient: str) -> str:
+    """Stable hash identifying a unique (task, recipient) context.
+
+    Matches the formula in benchmark.dataset_loaders.cim so label keys
+    produced here can be looked up by the CIM dataset loader.
+    """
+    import hashlib
+    return hashlib.md5(f"{task.lower()}|{recipient.lower()}".encode()).hexdigest()[:12]
+
+
 def load_cim_groups(
     dataset_id: str = "facebook/CIMemories", split: str = "test"
 ) -> dict[str, dict[str, Any]]:
-    """Load CIM dataset and group by (name, prompt).
+    """Load CIM dataset and group by (name, context).
 
-    Returns dict keyed by 'name|prompt_hash' with value containing
-    attributes, memory_statements, recipient, purpose, and raw prompt.
+    Returns dict keyed by 'name|context_hash' where context_hash is derived
+    from the lowercased task and recipient (matching CIMDataset's lookup key).
     """
     from datasets import load_dataset
-    import hashlib
 
     ds = load_dataset(dataset_id, split=split)
 
@@ -150,16 +159,15 @@ def load_cim_groups(
 
     groups: dict[str, dict[str, Any]] = {}
     for (name, prompt), rows in raw_groups.items():
-        prompt_hash = hashlib.md5(prompt.encode()).hexdigest()[:12]
-        group_key = f"{name}|{prompt_hash}"
-
         attributes = [r["attribute"] for r in rows]
         memory_statements = [r["memory_statement"] for r in rows]
         recipient, purpose = _extract_task_info(prompt)
+        ctx_hash = _context_hash(purpose, recipient)
+        group_key = f"{name}|{ctx_hash}"
 
         groups[group_key] = {
             "name": name,
-            "prompt_hash": prompt_hash,
+            "context_hash": ctx_hash,
             "full_prompt": prompt,
             "recipient": recipient,
             "purpose": purpose,
@@ -499,7 +507,7 @@ def aggregate_labels(
     for group_key, group_data in groups.items():
         group_pair = pair_labels.get(group_key, {})
         name = group_data["name"]
-        prompt_hash = group_data["prompt_hash"]
+        ctx_hash = group_data["context_hash"]
         attributes = group_data["attributes"]
 
         definitive_values = [v for v in group_pair.values() if v is not None]
@@ -510,13 +518,13 @@ def aggregate_labels(
             # Discard entire context
             groups_discarded += 1
             for attr in attributes:
-                labels[f"{name}|{prompt_hash}|{attr}"] = None
+                labels[f"{name}|{ctx_hash}|{attr}"] = None
                 total_ambiguous += 1
         else:
             groups_kept += 1
             for attr in attributes:
                 lbl = group_pair.get(attr)
-                labels[f"{name}|{prompt_hash}|{attr}"] = lbl
+                labels[f"{name}|{ctx_hash}|{attr}"] = lbl
                 if lbl == "necessary":
                     total_necessary += 1
                 elif lbl == "inappropriate":
