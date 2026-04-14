@@ -1,9 +1,8 @@
 {
-  "input": "cim_partitioned_llama3p3.jsonl",
-  "output": "output_cim_partitioned_llama3p3.json",
+  "input": "cim_normalized.jsonl",
+  "output": "output_cim_high.json",
   "dataset": "cim",
-  "method":"partitioned",
-  "prompt_template": "prompts/cim_paper.txt",
+  "prompt_template": "prompts/defensive/cim_defense_high.txt",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
   "concurrency": 50,
@@ -15,8 +14,7 @@
       "api_params": {
         "location": "us-central1", 
         "max_output_tokens": 1024
-      },
-      "input": "cim_partitioned_llama3p3.jsonl"
+      }
     }
   ]
 }

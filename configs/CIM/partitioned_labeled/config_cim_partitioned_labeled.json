@@ -1,8 +1,8 @@
 {
   "input": "cim_partitioned_llama3p3.jsonl",
-  "output": "output_cim_partitioned_llama3p3.json",
+  "output": "output_cim_partitioned_labeled_llama3p3.json",
   "dataset": "cim",
-  "method":"partitioned",
+  "method":"partitioned_labeled",
   "prompt_template": "prompts/cim_paper.txt",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
