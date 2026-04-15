@@ -31,13 +31,23 @@ InputEntry: TypeAlias = dict[str, Any]
 WorkItem: TypeAlias = tuple[InputEntry, ModelEntry, int]
 
 
-def _normalize_memories(memories: list[str] | dict[str, list[str]]) -> list[str]:
+def _normalize_memories(memories: list[str] | dict) -> list[str]:
     """Convert memories to a plain list for prompt consumption.
 
-    - list  → returned as-is
-    - dict  → each category becomes one string: "category: mem1, mem2, …"
+    - list                        → returned as-is
+    - dict[str, list[str]]        → each category becomes one string: "category: mem1, mem2, …"
+    - dict[str, dict[str, list]]  → two-level tree: all leaf memories flattened into a plain list
     """
     if isinstance(memories, dict):
+        first = next(iter(memories.values()), None)
+        if isinstance(first, dict):
+            # Two-level tree: flatten every leaf memory into a plain list
+            return [
+                mem
+                for cat_node in memories.values()
+                for mems in cat_node.values()
+                for mem in mems
+            ]
         return [
             f"{category}: {', '.join(mems)}"
             for category, mems in memories.items()
@@ -127,9 +137,15 @@ def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> l
             "failure_type": failure_type,
         }
         if isinstance(raw_memories, dict):
-            entry_data["categorized_memories"] = {
-                category: list(items) for category, items in raw_memories.items()
-            }
+            first = next(iter(raw_memories.values()), None)
+            if isinstance(first, dict):
+                # Two-level tree: store the full structure for tree-mode loading
+                entry_data["tree_memories"] = raw_memories
+            else:
+                # One-level partitioned dict: store for partitioned_labeled mode
+                entry_data["categorized_memories"] = {
+                    category: list(items) for category, items in raw_memories.items()
+                }
         if is_cim:
             for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
                         "attribute_memory_map"):

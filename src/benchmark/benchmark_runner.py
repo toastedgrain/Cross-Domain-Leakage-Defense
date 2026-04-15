@@ -280,6 +280,46 @@ def _merge_partitioned_cim_entries(
     return entries
 
 
+def _merge_tree_cim_entries(config: BenchmarkConfig) -> list[InputEntry]:
+    """CIM tree loader.
+
+    Like the partitioned CIM loader, base metadata (task, recipient, attrs,
+    hash_id, rendered query) always comes from ``config.input`` (the normalized
+    baseline JSONL).  ``model.input`` provides the two-level tree memories
+    (``{"category": {"subcategory": ["memory", ...], ...}, ...}``) which are
+    matched by hash_id and stored per-model so ``_format_generation_memories``
+    can render them as a structured tree in the prompt.
+    """
+    base_entries = load_and_validate_entries(config.input, dataset="cim")
+    base_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in base_entries}
+
+    merged: dict[str, InputEntry] = {}
+    for model in config.models:
+        if model.input is not None and model.input != config.input:
+            mem_entries = load_and_validate_entries(model.input, dataset="cim")
+            mem_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in mem_entries}
+        else:
+            mem_by_hash = base_by_hash
+
+        for hash_id, base_entry in base_by_hash.items():
+            source = mem_by_hash.get(hash_id, base_entry)
+            # Prefer the full two-level tree dict; fall back to flat list
+            model_mems = source.get("tree_memories") or list(source["memories"])
+
+            if hash_id in merged:
+                merged[hash_id]["model_affinity"].add(model.name)
+                merged[hash_id]["model_memories"][model.name] = model_mems
+            else:
+                entry = dict(base_entry)
+                entry["model_affinity"] = {model.name}
+                entry["model_memories"] = {model.name: model_mems}
+                merged[hash_id] = entry
+
+    entries = list(merged.values())
+    print(f"CIM tree mode: {len(entries)} entries across {len(config.models)} model(s)")
+    return entries
+
+
 def _load_dataset_entries(config: BenchmarkConfig, effective_dataset: str) -> list[InputEntry]:
     """Load entries for the given dataset, dispatching on dataset → method.
 
@@ -292,6 +332,8 @@ def _load_dataset_entries(config: BenchmarkConfig, effective_dataset: str) -> li
             return _merge_partitioned_cim_entries(config, label_memories=False)
         elif config.method == "partitioned_labeled":
             return _merge_partitioned_cim_entries(config, label_memories=True)
+        elif config.method == "tree":
+            return _merge_tree_cim_entries(config)
         return load_and_validate_entries(config.input, dataset="cim")
     elif effective_dataset == "persistbench":
         if config.method == "partitioned":
@@ -325,7 +367,7 @@ def _load_from_file(
     if is_checkpoint:
         checkpoint = data
         config = reconstruct_config(checkpoint, file_path)
-        if config.method in ("partitioned", "partitioned_labeled"):
+        if config.method in ("partitioned", "partitioned_labeled", "tree"):
             # Re-load from input files so entries carry model_affinity/model_memories
             # (those fields are not persisted in the checkpoint to keep output clean)
             effective_dataset = dataset_override or config.dataset

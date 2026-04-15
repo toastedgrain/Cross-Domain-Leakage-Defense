@@ -73,12 +73,14 @@ class GenerationTask:
         return self.entry["hash_id"]
 
     @property
-    def memories(self) -> list[str] | dict[str, list[str]]:
+    def memories(self) -> list[str] | dict[str, list[str]] | dict[str, dict[str, list[str]]]:
         """Return the memories to use for this model's generation.
 
-        In partitioned mode each model has its own categorised memories stored
-        under entry["model_memories"][model_name].  For every other mode the
-        shared entry["memories"] flat list is used.
+        In partitioned/partitioned_labeled mode each model has its own flat or
+        categorised memories stored under entry["model_memories"][model_name].
+        In tree mode the value is a two-level dict keyed by category then
+        subcategory.  For every other mode the shared entry["memories"] flat
+        list is used.
         """
         model_memories: dict = self.entry.get("model_memories", {})
         return model_memories.get(self.model.name) or self.entry["memories"]
@@ -109,7 +111,7 @@ def build_generation_tasks(pending_work: Sequence[WorkItem]) -> list[GenerationT
 
 
 def _format_generation_memories(
-    memories: list[str] | dict[str, list[str]],
+    memories: list[str] | dict[str, list[str]] | dict[str, dict[str, list[str]]],
     *,
     hash_id: str,
     model_name: str,
@@ -117,27 +119,60 @@ def _format_generation_memories(
 ) -> list[str]:
     """Flatten memories into prompt-ready lines.
 
-    Partitioned inputs may preserve category buckets as
-    ``{"health": ["m1", "m2"]}``. Expand those into:
+    Three formats are accepted:
 
-    - ``health: m1``
-    - ``health: m2``
+    - ``list[str]``                      — baseline: returned as-is.
+    - ``dict[str, list[str]]``           — partitioned (one level): expanded to
+      ``"category: memory"`` lines and shuffled deterministically so categories
+      are interleaved while reruns stay reproducible.
+    - ``dict[str, dict[str, list[str]]]`` — tree (two levels): rendered as an
+      indented hierarchy and the category order is shuffled deterministically::
 
-    For partitioned inputs, the flattened lines are shuffled in a
-    deterministic order so categories are interleaved while reruns remain
-    reproducible.
+          [health]
+            [physical health]
+              - memory1
+              - memory2
+            [mental health]
+              - memory3
+          [identity]
+            [religious beliefs]
+              - memory4
     """
-    if isinstance(memories, dict):
-        formatted: list[str] = []
-        for category, items in memories.items():
-            for memory in items:
-                formatted.append(f"{category}: {memory}")
-        seed_material = f"{BENCHMARK_SEED}|{hash_id}|{model_name}|{gen_idx}"
-        seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest(), 16)
-        rng = random.Random(seed)
-        rng.shuffle(formatted)
-        return formatted
-    return list(memories)
+    if not isinstance(memories, dict):
+        return list(memories)
+
+    seed_material = f"{BENCHMARK_SEED}|{hash_id}|{model_name}|{gen_idx}"
+    seed = int(hashlib.sha256(seed_material.encode("utf-8")).hexdigest(), 16)
+    rng = random.Random(seed)
+
+    first = next(iter(memories.values()), None)
+    if isinstance(first, dict):
+        # Two-level tree: render as indented hierarchy, shuffle category order.
+        tree: dict[str, dict[str, list[str]]] = memories  # type: ignore[assignment]
+        categories = list(tree.keys())
+        rng.shuffle(categories)
+        lines: list[str] = []
+        for cat in categories:
+            subcats = tree[cat]
+            # Skip completely empty categories to keep the prompt clean
+            if not any(subcats.values()):
+                continue
+            lines.append(f"[{cat}]")
+            for sub, mems in subcats.items():
+                if not mems:
+                    continue
+                lines.append(f"  [{sub}]")
+                for mem in mems:
+                    lines.append(f"    - {mem}")
+        return lines
+
+    # One-level partitioned dict: "category: memory" lines, fully shuffled.
+    formatted: list[str] = []
+    for category, items in memories.items():
+        for memory in items:
+            formatted.append(f"{category}: {memory}")
+    rng.shuffle(formatted)
+    return formatted
 
 
 class SequentialGenerationExecutor:
@@ -324,7 +359,7 @@ async def _generate_model_response(
     model: ModelEntry,
     generate_response_fn: GenerateFn,
     query: str,
-    memories: list[str] | dict[str, list[str]],
+    memories: list[str] | dict[str, list[str]] | dict[str, dict[str, list[str]]],
     task_hash_id: str,
     gen_idx: int,
     prompt_template: str | None = None,
