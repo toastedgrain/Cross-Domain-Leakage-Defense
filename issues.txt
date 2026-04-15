@@ -1,6 +1,7 @@
 TODO
 remove redudent queries from cim samples
 look into deepseek labeling, fix format and voting
+add per-model output path
 
 Done:
 fix persistbench partitioned_labeled
