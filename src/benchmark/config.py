@@ -72,7 +72,7 @@ class ModelEntry(BaseModel):
     api_params: dict[str, Any] | None = None
     base_url: str | None = None
     api_key_env: str | None = None
-    input: Path | None = None  # Per-model input file (only used when config method="partitioned")
+    input: Path | None = None  # Per-model input file (used when config method="partitioned", "partitioned_labeled", or "tree")
 
 
 JUDGE_MODEL_ENTRY_OPENROUTER = ModelEntry(
@@ -149,10 +149,10 @@ def load_benchmark_config_data(
     config = BenchmarkConfig(**data)
 
     # Validate method field
-    if config.method is not None and config.method not in ("partitioned", "partitioned_labeled"):
+    if config.method is not None and config.method not in ("partitioned", "partitioned_labeled", "tree"):
         raise ValueError(
             f"Invalid method '{config.method}' in config ({config_path}). "
-            f"Valid values: 'partitioned', 'partitioned_labeled' (or omit for default behaviour)."
+            f"Valid values: 'partitioned', 'partitioned_labeled', 'tree' (or omit for default behaviour)."
         )
 
     # Validate unique model names (results are keyed by name in checkpoint)
