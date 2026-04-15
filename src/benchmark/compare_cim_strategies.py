@@ -56,6 +56,162 @@ def _fmt(val: float, std: float) -> str:
     return f"{val:5.2f} +/- {std:4.2f}"
 
 
+_STRATEGY_SUBDIRS = ("baseline", "defense", "partitioned")
+
+
+def _derive_strategy_name(subdir: str, file_stem: str) -> str:
+    """Turn (subdir, filename) into a display label, e.g. ('defense', 'output_cim_high') -> 'Defense High'."""
+    tail = file_stem.replace("output_cim_", "").replace("cim_", "")
+    # Strip generator/judge suffixes like _llama3p3 for cleaner labels.
+    for noise in ("_llama3p3", "_gemini", "_kimi", "_paper_replication"):
+        tail = tail.replace(noise, "")
+    tail = tail.strip("_") or subdir
+    if subdir == "defense":
+        return f"Defense {tail.title()}"
+    return tail.replace("_", " ").title() or subdir.title()
+
+
+def _discover_strategies(labels_dir: Path) -> dict[str, Path]:
+    """Walk labels_dir and return {strategy_name: checkpoint_path}.
+
+    Accepts both flat (labels_dir/baseline/...) and nested
+    (labels_dir/<generator>/baseline/...) layouts.
+    """
+    candidates: list[Path] = []
+    for sub in _STRATEGY_SUBDIRS:
+        direct = labels_dir / sub
+        if direct.is_dir():
+            candidates.append(direct)
+        # One-level nesting (e.g. llama3p3/baseline)
+        for child in labels_dir.iterdir() if labels_dir.is_dir() else []:
+            nested = child / sub
+            if nested.is_dir():
+                candidates.append(nested)
+
+    strategies: dict[str, Path] = {}
+    for strat_dir in candidates:
+        subdir = strat_dir.name
+        for jf in sorted(strat_dir.glob("*.json")):
+            name = _derive_strategy_name(subdir, jf.stem)
+            # Avoid collisions — append path hint if needed.
+            if name in strategies:
+                name = f"{name} ({strat_dir.parent.name})"
+            strategies[name] = jf
+    return strategies
+
+
+def run_compare_cli(labels_dir: str | Path, per_persona: bool = False) -> int:
+    """Auto-discover strategy JSONs under labels_dir and print a comparison table.
+
+    Layout expected: labels_dir/[<generator>/]{baseline,defense,partitioned}/*.json
+    Each JSON becomes one row. Judge column is omitted (assumes one judge per tree).
+    """
+    root = Path(labels_dir).resolve()
+    if not root.is_dir():
+        print(f"[ERROR] Not a directory: {root}")
+        return 1
+
+    discovered = _discover_strategies(root)
+    if not discovered:
+        print(f"[ERROR] No strategy checkpoints found under {root}")
+        print(f"        Expected subdirs: {_STRATEGY_SUBDIRS}")
+        return 1
+
+    rows: list[tuple[str, dict | None]] = []
+    skipped: list[tuple[str, Path, str]] = []
+    for name, path in discovered.items():
+        data = _load(path)
+        if data is None:
+            skipped.append((name, path, "file not found"))
+            continue
+        m = compute_cim_metrics(data)
+        if m["n_entries"] == 0:
+            skipped.append((name, path, "0 entries (unparseable or wrong schema)"))
+            continue
+        rows.append((name, m))
+
+    for name, path, reason in skipped:
+        print(f"[SKIP] {name} -> {path.name}: {reason}")
+
+    width = 96
+    print()
+    print("=" * width)
+    print(f"{'CIM Benchmark: Strategy Comparison':^{width}}")
+    print(f"{f'Root: {root}':^{width}}")
+    print("=" * width)
+    print(f"{'Strategy':<30} | {'Violation %':>16} | {'Coverage %':>16} | {'Entries':>8}")
+    print("-" * width)
+    for name, m in rows:
+        if m is None:
+            print(f"{name:<30} | {'--':>16} | {'--':>16} | {'--':>8}")
+            continue
+        viol = _fmt(m["violation_mean"], m["violation_std"])
+        cov = _fmt(m["coverage_mean"], m["coverage_std"])
+        print(f"{name:<30} | {viol:>16} | {cov:>16} | {m['n_entries']:>8}")
+
+    # Defense-vs-baseline reduction block
+    baseline_row = next(
+        (m for n, m in rows if n.lower() == "baseline" and m is not None), None
+    )
+    if baseline_row and baseline_row["violation_mean"] > 0:
+        print()
+        print(f"{'Change vs Baseline (- is better for violation, + for coverage)':^{width}}")
+        print("-" * width)
+        for name, m in rows:
+            if m is None or name.lower() == "baseline":
+                continue
+            # Relative change in violation: negative = defense worked.
+            vd = (m["violation_mean"] / baseline_row["violation_mean"] - 1) * 100
+            cd = m["coverage_mean"] - baseline_row["coverage_mean"]
+            print(f"{name:<30} | violation {vd:+6.1f}%   | coverage {cd:+6.2f}pp")
+
+    if per_persona:
+        _print_per_persona(rows, metric_key="per_user_violation", label="Violation %", width=width)
+        _print_per_persona(rows, metric_key="per_user_coverage", label="Coverage %", width=width)
+
+    print()
+    print("Violation = % private attrs leaked  (lower is better)")
+    print("Coverage  = % required attrs included (higher is better)")
+    print()
+    return 0
+
+
+def _print_per_persona(
+    rows: list[tuple[str, dict | None]],
+    metric_key: str,
+    label: str,
+    width: int,
+) -> None:
+    """Print a persona x strategy matrix for the given metric."""
+    strat_names = [n for n, m in rows if m is not None]
+    personas: set[str] = set()
+    for _, m in rows:
+        if m is not None:
+            personas.update(m.get(metric_key, {}).keys())
+    if not personas:
+        return
+
+    print()
+    print("=" * width)
+    print(f"{f'Per-Persona {label} by Strategy':^{width}}")
+    print("=" * width)
+    persona_w = max(len("Persona"), max(len(p) for p in personas))
+    col_w = 14
+    header = f"{'Persona':<{persona_w}}" + "".join(
+        f" | {s[:col_w]:>{col_w}}" for s in strat_names
+    )
+    print(header)
+    print("-" * len(header))
+    for persona in sorted(personas):
+        row = f"{persona:<{persona_w}}"
+        for name, m in rows:
+            if m is None:
+                continue
+            val = m.get(metric_key, {}).get(persona)
+            row += f" | {val * 100:>{col_w - 1}.2f}%" if val is not None else f" | {'--':>{col_w}}"
+        print(row)
+
+
 def main() -> None:
     # Collect metrics: metrics[strategy][judge] = dict
     metrics: dict[str, dict[str, dict | None]] = {}

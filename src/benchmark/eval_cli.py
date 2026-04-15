@@ -18,6 +18,7 @@ from benchmark.benchmark_runner import (
     run_benchmark_with_retry,
 )
 from benchmark.metrics_cim import run_cim_metrics_cli
+from benchmark.compare_cim_strategies import run_compare_cli
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -245,11 +246,40 @@ async def main_async() -> int:
         help="Filter results to a specific model name",
     )
 
+    cim_compare_parser = subparsers.add_parser(
+        "cim-compare",
+        help="Compare CIM metrics across strategies (baseline / defense / partitioned)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""
+            Auto-discovers strategy checkpoints under the given labels root and
+            prints a side-by-side violation/coverage comparison table.
+
+            Expected layout (either works):
+              labels_dir/{baseline,defense,partitioned}/*.json
+              labels_dir/<generator>/{baseline,defense,partitioned}/*.json
+
+            Example:
+              benchmark cim-compare outputs/CIM/deepseekV3p2_labeled
+        """),
+    )
+    cim_compare_parser.add_argument(
+        "labels_dir",
+        help="Root dir containing baseline/, defense/, partitioned/ subfolders",
+    )
+    cim_compare_parser.add_argument(
+        "--per-persona",
+        action="store_true",
+        help="Also print per-persona violation and coverage tables",
+    )
+
     args = parser.parse_args()
 
     if args.subcommand == "cim-metrics":
         run_cim_metrics_cli(args.file, model_name=args.model)
         return 0
+
+    if args.subcommand == "cim-compare":
+        return run_compare_cli(args.labels_dir, per_persona=args.per_persona)
 
     if args.subcommand == "cim-label":
         from pathlib import Path

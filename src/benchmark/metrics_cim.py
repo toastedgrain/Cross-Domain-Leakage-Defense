@@ -14,11 +14,47 @@ Usage::
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+# Matches free-text memories like "Douglas Perry is the person's name."
+# Used as a fallback when cim_metadata.name is missing (deepseek-labeled tree).
+_NAME_FROM_MEMORY_RE = re.compile(
+    r"^(.+?)\s+is\s+the\s+person[\u2019']?s\s+name\.?\s*$", re.IGNORECASE
+)
+
+
+def _clean_name(raw: str) -> str:
+    """Strip the 'is the person's name.' suffix if present; otherwise return as-is."""
+    m = _NAME_FROM_MEMORY_RE.match(raw.strip())
+    return m.group(1).strip() if m else raw.strip()
+
+
+def _extract_persona_name(entry: dict[str, Any], cim_meta: dict[str, Any]) -> str:
+    """Return the persona name, falling back through several locations.
+
+    Tries (in order): cim_metadata.name, entry.attribute_memory_map['name'],
+    any memory matching 'X is the person's name'. All candidates are passed
+    through _clean_name to strip the verbose suffix when present.
+    """
+    candidates = [
+        cim_meta.get("name"),
+        entry.get("attribute_memory_map", {}).get("name"),
+    ]
+    for cand in candidates:
+        if isinstance(cand, str) and cand.strip():
+            return _clean_name(cand)
+    for mem in entry.get("memories", []) or []:
+        if not isinstance(mem, str):
+            continue
+        m = _NAME_FROM_MEMORY_RE.match(mem.strip())
+        if m:
+            return m.group(1).strip()
+    return "unknown"
 
 # Private attribute keys containing these substrings are filtered out,
 # matching the official CIMemories evaluation behaviour.
@@ -51,9 +87,12 @@ def _extract_results(
             continue
 
         cim_meta = entry.get("cim_metadata", {})
-        user_name = cim_meta.get("name", "unknown")
+        user_name = _extract_persona_name(entry, cim_meta)
         task = entry.get("query", "")
-        attr_mem_map: dict[str, str] = cim_meta.get("attribute_memory_map", {})
+        attr_mem_map: dict[str, str] = (
+            cim_meta.get("attribute_memory_map")
+            or entry.get("attribute_memory_map", {})
+        )
         required = set(entry.get("required_attributes", []))
         forbidden = set(entry.get("forbidden_attributes", []))
 
