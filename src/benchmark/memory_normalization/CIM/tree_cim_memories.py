@@ -55,7 +55,7 @@ os.environ.setdefault(
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 MODEL_NAME     = "meta/llama-3.3-70b-instruct-maas"
 MODEL_LOCATION = "us-central1"   # VertexAI region where the model is deployed
-TEMPERATURE    = 0
+TEMPERATURE    = 0.7
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
@@ -92,20 +92,20 @@ categories listed below so that any memory could later be placed into the
 resulting two-level tree.
 
 The 11 top-level categories are:
-  health       – physical or mental health, medical conditions, treatments, medications, fitness, therapy
-  identity     – core personal identity traits such as nationality, religion, gender identity, values, beliefs
-  social       – non-romantic relationships and interactions with friends, family, acquaintances, or colleagues
-  romantic     – intimate or romantic relationships including dating, partners, marriage, attraction, breakups
-  personal     – hobbies, preferences, lifestyle choices, personality traits, interests
-  education    – schooling, degrees, courses, academic history, tutoring, learning experiences
-  employment   – jobs, work history, workplace experiences, colleagues, professional skills
-  finance      – money, savings, income, expenses, debt, investments, banking, taxes
-  housing      – home, residence, living situation, roommates, neighbors, rent, mortgage
-  legal        – legal issues, contracts, court matters, rights, criminal record, official documents
-  schedule     – appointments, routines, recurring events, time-based plans, daily habits
+  health
+  identity
+  social
+  romantic 
+  personal
+  education
+  employment
+  finance
+  housing 
+  legal 
+  schedule
 
 Rules:
-1. Each category must have between 1 and {max_subcats} subcategories.
+1. Each category must have between 3 and {max_subcats} subcategories.
 2. Subcategory names must be short, descriptive, and lowercase (1–3 words).
 3. Subcategory names must be unique within a category.
 4. Base your subcategory choices on the actual memories provided — make them
@@ -133,25 +133,23 @@ the tree, choosing both the best top-level category and the best subcategory
 within that category.
 
 The 11 top-level categories are:
-  health       – physical or mental health, medical conditions, treatments, medications, fitness, therapy
-  identity     – core personal identity traits such as nationality, religion, gender identity, values, beliefs
-  social       – non-romantic relationships and interactions with friends, family, acquaintances, or colleagues
-  romantic     – intimate or romantic relationships including dating, partners, marriage, attraction, breakups
-  personal     – hobbies, preferences, lifestyle choices, personality traits, interests
-  education    – schooling, degrees, courses, academic history, tutoring, learning experiences
-  employment   – jobs, work history, workplace experiences, colleagues, professional skills
-  finance      – money, savings, income, expenses, debt, investments, banking, taxes
-  housing      – home, residence, living situation, roommates, neighbors, rent, mortgage
-  legal        – legal issues, contracts, court matters, rights, criminal record, official documents
-  schedule     – appointments, routines, recurring events, time-based plans, daily habits
+  health
+  identity
+  social
+  romantic 
+  personal
+  education
+  employment
+  finance
+  housing 
+  legal 
+  schedule
 
 Rules:
 1. Every memory must appear in exactly one subcategory of exactly one category.
 2. Do not drop or duplicate memories.
 3. Do not modify the memory text.
 4. If a memory could fit multiple categories, choose the most specific one.
-5. If a memory does not clearly fit any subcategory within the chosen category,
-   place it in the first subcategory of that category.
 
 Return ONLY a single-line JSON object that mirrors the tree skeleton but with
 each subcategory mapped to a list of memory strings (may be empty []).
