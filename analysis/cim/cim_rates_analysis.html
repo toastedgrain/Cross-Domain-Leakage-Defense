@@ -490,24 +490,15 @@ function processData(data, filename) {
     const judge = gen.judge || {};
     const perAttr = judge.per_attribute || [];
 
-    // Identify which forbidden attrs were revealed
     const forbidden = entry.forbidden_attributes || [];
-    const required = entry.required_attributes || [];
-    const revealedAttrs = judge.revealed_attributes || [];
-    const usedAttrs = judge.used_attributes || [];
+    const required  = entry.required_attributes  || [];
+    const forbSet   = new Set(forbidden);
+    const reqSet    = new Set(required);
 
-    // Compute which forbidden ones were revealed
-    const violatedForbidden = perAttr
-      .filter(a => forbidden.includes(a.id) && a.revealed)
-      .map(a => a.id);
-
-    // Compute which required ones were NOT used
-    const missingRequired = required.filter(a => !usedAttrs.includes(a));
-
-    // Raw counts for pooled rates
-    const forbiddenSet = new Set(forbidden);
-    const requiredSet = new Set(required);
-    const usedRequired = required.filter(a => usedAttrs.includes(a));
+    // Derive everything from per_attribute for consistency
+    const violatedForbidden = perAttr.filter(a => forbSet.has(a.id) && a.revealed).map(a => a.id);
+    const usedRequiredList  = perAttr.filter(a => reqSet.has(a.id)  && a.used).map(a => a.id);
+    const missingRequired   = required.filter(a => !usedRequiredList.includes(a));
 
     rows.push({
       id,
@@ -521,12 +512,10 @@ function processData(data, filename) {
       // per-entry rates (from judge) — kept for per-row display only
       violation_rate: judge.violation_rate != null ? judge.violation_rate : null,
       completeness_rate: judge.completeness_rate != null ? judge.completeness_rate : null,
-      // raw counts for pooled calculation
+      // raw counts
       violated_count: violatedForbidden.length,
-      used_required_count: usedRequired.length,
+      used_required_count: usedRequiredList.length,
       per_attribute: perAttr,
-      revealed_attributes: revealedAttrs,
-      used_attributes: usedAttrs,
       violated_forbidden: violatedForbidden,
       missing_required: missingRequired,
       memory_response: gen.memory_response || null,
@@ -570,28 +559,42 @@ function renderFileInfo(meta, filename, count) {
 }
 
 // ─── Stats ────────────────────────────────────────────────────────────────────
-function pooledRates(rows) {
-  let totalForb = 0, totalViol = 0, totalReq = 0, totalUsed = 0;
+
+// Violation rate: unique forbidden attrs violated at least once / total unique forbidden attrs
+function attrLevelViolation(rows) {
+  const attrRevealed = {}; // attr_id -> ever revealed?
   for (const r of rows) {
-    totalForb += r.forb_count;
-    totalViol += r.violated_count;
+    const forbSet = new Set(r.forbidden_attributes);
+    for (const a of r.per_attribute) {
+      if (forbSet.has(a.id)) {
+        if (!(a.id in attrRevealed)) attrRevealed[a.id] = false;
+        if (a.revealed) attrRevealed[a.id] = true;
+      }
+    }
+  }
+  const total    = Object.keys(attrRevealed).length;
+  const violated = Object.values(attrRevealed).filter(Boolean).length;
+  return { total, violated, rate: total > 0 ? violated / total : 0 };
+}
+
+// Completeness rate: total required attrs used across all tasks / total required attrs across all tasks
+function pooledCompleteness(rows) {
+  let totalReq = 0, totalUsed = 0;
+  for (const r of rows) {
     totalReq  += r.req_count;
     totalUsed += r.used_required_count;
   }
-  return {
-    vr: totalForb > 0 ? totalViol / totalForb : 0,
-    cr: totalReq  > 0 ? totalUsed / totalReq  : 0,
-    totalForb, totalViol, totalReq, totalUsed,
-  };
+  return { totalReq, totalUsed, cr: totalReq > 0 ? totalUsed / totalReq : 0 };
 }
 
 function renderStats(rows) {
-  const { vr: avgVR, cr: avgCR, totalForb, totalViol, totalReq, totalUsed } = pooledRates(rows);
+  const { rate: avgVR, total: vrTotal, violated: vrViolated } = attrLevelViolation(rows);
+  const { cr: avgCR, totalReq, totalUsed } = pooledCompleteness(rows);
   const zeroViol = rows.filter(r => r.violation_rate === 0).length;
   const errCount = rows.filter(r => r.error || r.memory_response === null).length;
 
   renderGauge('gauge-vr', avgVR, vrRateColor(avgVR));
-  document.getElementById('vr-sub').textContent = `${totalViol} / ${totalForb} forbidden attrs revealed`;
+  document.getElementById('vr-sub').textContent = `${vrViolated} / ${vrTotal} unique forbidden attrs violated`;
 
   renderGauge('gauge-cr', avgCR, crRateColor(avgCR));
   document.getElementById('cr-sub').textContent = `${totalUsed} / ${totalReq} required attrs used`;
@@ -671,8 +674,8 @@ function renderTaskChart(rows) {
   destroyChart('task');
   const grouped = groupBy(rows, 'task');
   const labels = Object.keys(grouped).sort();
-  const vrData = labels.map(l => pooledRates(grouped[l]).vr);
-  const crData = labels.map(l => pooledRates(grouped[l]).cr);
+  const vrData = labels.map(l => attrLevelViolation(grouped[l]).rate);
+  const crData = labels.map(l => pooledCompleteness(grouped[l]).cr);
   const ctx = document.getElementById('chart-task').getContext('2d');
   const opts = chartDefaults();
   opts.indexAxis = 'y';
@@ -696,8 +699,8 @@ function renderRecipientChart(rows) {
   destroyChart('recipient');
   const grouped = groupBy(rows, 'recipient');
   const labels = Object.keys(grouped).sort();
-  const vrData = labels.map(l => pooledRates(grouped[l]).vr);
-  const crData = labels.map(l => pooledRates(grouped[l]).cr);
+  const vrData = labels.map(l => attrLevelViolation(grouped[l]).rate);
+  const crData = labels.map(l => pooledCompleteness(grouped[l]).cr);
   const ctx = document.getElementById('chart-recipient').getContext('2d');
   const opts = chartDefaults();
   opts.indexAxis = 'y';
