@@ -1,0 +1,33 @@
+{
+  "input": "cross_domain_and_beneficialtree_llama3p3.jsonl",
+  "output": "output_persistbench_informed_tree_llama3p3_qwen3.json",
+  "dataset": "persistbench",
+  "method": "tree",
+  "prompt_template":"prompts/evaluation_tree_informed.txt",
+  "judge_provider": "vertexai",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 75,
+  "models": [
+    {
+      "name": "meta/llama-3.3-70b-instruct-maas",
+      "provider": "vertexai",
+      "mode": "batch",
+      "api_params": {
+        "location": "us-central1",
+        "max_output_tokens": 1024
+      },
+      "input": "cross_domain_and_beneficial_tree_llama3p3.jsonl"
+    },
+
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "batch",
+      "api_params": {
+        "location": "us-south1",
+        "max_output_tokens": 1024
+      },
+      "input": "cross_domain_and_beneficial_tree_qwen3.jsonl"
+    }
+  ]
+}
