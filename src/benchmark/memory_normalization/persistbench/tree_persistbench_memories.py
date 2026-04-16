@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Build a two-level memory tree for each CIM persona — once per persona.
+"""Build a two-level memory tree for each PersistBench sample — once per row.
 
-Reads a normalized CIM JSONL file (memories as a flat list), then uses an LLM
-to build a full two-level tree in two sequential calls per persona:
+Reads a baseline PersistBench JSONL file (memories as a flat list), then uses an
+LLM to build a full two-level tree in two sequential calls per sample:
 
   Phase 1 — Tree skeleton: given the flat memory list and the 11 default
              top-level categories, generate up to 7 subcategories per category
@@ -23,11 +23,11 @@ Output memories field shape (easy to inject as a tree prompt):
   }
 
 Usage:
-  # Process specific personas only
-  uv run python tree_cim_memories.py --personas "Jeffery Day" "Shawn Franklin"
-
-  # Process all personas
+  # Process all samples
   uv run python tree_cim_memories.py
+
+  # Override input/output paths
+  uv run python tree_cim_memories.py --input /path/to/input.jsonl --output /path/to/output.jsonl
 
 ─── HOW TO EDIT ───────────────────────────────────────────────────────────────
   * Change the model / location / temperature  ->  MODEL block below
@@ -41,9 +41,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import hashlib
 import json
-from collections import defaultdict
 from pathlib import Path
 import os
 
@@ -53,19 +51,19 @@ os.environ.setdefault(
 )
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
-MODEL_NAME     = "meta/llama-3.3-70b-instruct-maas"
-MODEL_LOCATION = "us-central1"   # VertexAI region where the model is deployed
+MODEL_NAME     = "qwen/qwen3-235b-a22b-instruct-2507-maas"
+MODEL_LOCATION = "global"   # VertexAI region where the model is deployed
 TEMPERATURE    = 0.7
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
-CONCURRENCY     = 7    # max simultaneous API requests
+CONCURRENCY     = 10    # max simultaneous API requests
 MAX_RETRIES     = 5    # retry attempts per API call on parse / API failure
 MAX_SUBCATS     = 7    # maximum subcategories per top-level category
-MAX_PERSONAS    = None  # max number of personas to process (None = all)
+MAX_SAMPLES     = None  # max number of samples to process (None = all)
 _PROJECT_ROOT   = Path(__file__).resolve().parent.parent.parent.parent.parent  # repo root
-CIM_INPUT_FILE  = _PROJECT_ROOT / "benchmark_samples" / "CIM" / "baseline" / "cim_normalized.jsonl"
-OUTPUT_FILE     = _PROJECT_ROOT / "benchmark_samples" / "CIM" / "tree" / "cim_tree_llama3p3.jsonl"
+INPUT_FILE      = _PROJECT_ROOT / "benchmark_samples" / "persistbench" / "baseline" / "cross_domain_and_beneficial.jsonl"
+OUTPUT_FILE     = _PROJECT_ROOT / "benchmark_samples" / "persistbench" / "tree" / "qwen3_235b" / "cross_domain_and_beneficial_tree_qwene_235b.jsonl"
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── CATEGORIES ────────────────────────────────────────────────────────────────
@@ -95,13 +93,13 @@ The 11 top-level categories are:
   health
   identity
   social
-  romantic 
+  romantic
   personal
   education
   employment
   finance
-  housing 
-  legal 
+  housing
+  legal
   schedule
 
 Rules:
@@ -136,13 +134,13 @@ The 11 top-level categories are:
   health
   identity
   social
-  romantic 
+  romantic
   personal
   education
   employment
   finance
-  housing 
-  legal 
+  housing
+  legal
   schedule
 
 Rules:
@@ -167,25 +165,18 @@ Example shape:
 import sys  # noqa: E402
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))  # add src/ so 'benchmark' is importable
 
-from benchmark.utils import extract_json_from_response, get_vertex_ai_client  # noqa: E402
+from benchmark.utils import extract_json_from_response, generate_hash_id, get_vertex_ai_client  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Build a two-level memory tree for CIM personas (once per persona).",
-    )
-    parser.add_argument(
-        "--personas",
-        nargs="+",
-        default=None,
-        help='Persona names to process (e.g. --personas "Jeffery Day" "Shawn Franklin"). '
-             "Omit to process all personas.",
+        description="Build a two-level memory tree for PersistBench samples.",
     )
     parser.add_argument(
         "--input",
         type=Path,
-        default=CIM_INPUT_FILE,
-        help=f"Partitioned CIM JSONL input file (default: {CIM_INPUT_FILE})",
+        default=INPUT_FILE,
+        help=f"Baseline PersistBench JSONL input file (default: {INPUT_FILE})",
     )
     parser.add_argument(
         "--output",
@@ -196,20 +187,9 @@ def _parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def _row_key(row: dict) -> str:
-    """Unique key for a single output row: name + task + recipient."""
-    return f"{row.get('name', '')}|{row.get('task', '')}|{row.get('recipient', '')}"
-
-
-def _load_checkpoint(output_file: Path) -> tuple[set[str], dict[str, dict]]:
-    """Return (done_keys, persona_trees) from the existing output file.
-
-    done_keys are 'name|task|recipient' strings.
-    persona_trees maps persona name → recovered two-level tree dict.
-    """
+def _load_checkpoint(output_file: Path) -> set[str]:
+    """Return the set of queries already written to the output file."""
     done: set[str] = set()
-    persona_trees: dict[str, dict] = {}
-
     if output_file.exists():
         with open(output_file, encoding="utf-8") as f:
             for line in f:
@@ -218,14 +198,10 @@ def _load_checkpoint(output_file: Path) -> tuple[set[str], dict[str, dict]]:
                     continue
                 try:
                     row = json.loads(line)
-                    done.add(_row_key(row))
-                    name = row.get("name")
-                    if name and name not in persona_trees:
-                        persona_trees[name] = row["memories"]
+                    done.add(row["query"])
                 except (json.JSONDecodeError, KeyError):
                     pass
-
-    return done, persona_trees
+    return done
 
 
 def _validate_skeleton(raw: dict) -> dict[str, list[str]]:
@@ -374,37 +350,41 @@ async def _fill_tree(
     return tree
 
 
-def _make_hash_id(name: str, task: str, recipient: str) -> str:
-    """Stable hash keyed on name + task + recipient — matches cim_normalize.py."""
-    return hashlib.md5(
-        json.dumps(
-            {"name": name, "task": task, "recipient": recipient},
-            ensure_ascii=False,
-            sort_keys=True,
-        ).encode()
-    ).hexdigest()
+async def _process_sample(
+    raw_row: dict,
+    client,
+    semaphore: asyncio.Semaphore,
+    out_file,
+    lock: asyncio.Lock,
+    counter: list[int],
+    total: int,
+) -> None:
+    """Build a two-level memory tree for a single sample and write it out."""
+    memories: list[str] = raw_row.get("memories", [])
+    hash_id = raw_row.get("hash_id") or generate_hash_id(memories, raw_row["query"])
 
+    if memories:
+        skeleton = await _generate_skeleton(client, memories, semaphore)
+        tree = await _fill_tree(client, memories, skeleton, semaphore)
+    else:
+        skeleton = {cat: [cat] for cat in CATEGORIES}
+        tree = {cat: {cat: []} for cat in CATEGORIES}
 
-def _build_sample_row(raw_row: dict, tree: dict[str, dict[str, list[str]]]) -> dict:
-    """Build the output JSONL row for a single sample.
-
-    Mirrors the cim_partitioned format exactly, replacing the flat category
-    dict with the two-level tree dict in the 'memories' field.
-    """
-    name = raw_row["name"]
-    task = raw_row["task"]
-    recipient = raw_row["recipient"]
-    return {
-        "name": name,
+    out_row = {
         "query": raw_row["query"],
         "memories": tree,
-        "task": task,
-        "recipient": recipient,
-        "attribute_memory_map": raw_row.get("attribute_memory_map", {}),
-        "required_attributes": raw_row.get("required_attributes", []),
-        "forbidden_attributes": raw_row.get("forbidden_attributes", []),
-        "hash_id": raw_row.get("hash_id") or _make_hash_id(name, task, recipient),
+        "memory_domain": raw_row.get("memory_domain", ""),
+        "query_domain": raw_row.get("query_domain", ""),
+        "failure_type": raw_row.get("failure_type", ""),
+        "hash_id": hash_id,
     }
+
+    async with lock:
+        out_file.write(json.dumps(out_row, ensure_ascii=False) + "\n")
+        out_file.flush()
+        counter[0] += 1
+        query_preview = raw_row["query"][:70]
+        print(f"[{counter[0]}/{total}] {query_preview}...")
 
 
 async def main() -> None:
@@ -412,124 +392,48 @@ async def main() -> None:
     input_file: Path = args.input
     output_file: Path = args.output
 
-    # ── Load normalized rows ─────────────────────────────────────────────────
-    print(f"Loading normalized CIM dataset from {input_file} ...")
+    # ── Load baseline rows ───────────────────────────────────────────────────
+    print(f"Loading PersistBench dataset from {input_file} ...")
     raw_rows: list[dict] = []
     with open(input_file, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
                 raw_rows.append(json.loads(line))
-    print(f"Loaded {len(raw_rows)} CIM rows")
+    print(f"Loaded {len(raw_rows)} rows")
 
-    # ── Group rows by persona ────────────────────────────────────────────────
-    persona_rows: dict[str, list[dict]] = defaultdict(list)
-    for row in raw_rows:
-        persona_rows[row["name"]].append(row)
-
-    # Apply persona filter from CLI
-    if args.personas is not None:
-        requested = set(args.personas)
-        available = set(persona_rows.keys())
-        unknown = requested - available
-        if unknown:
-            print(f"[WARN] Unknown persona(s): {unknown}")
-            print(f"       Available: {sorted(available)}")
-        persona_rows = {
-            name: rows for name, rows in persona_rows.items()
-            if name in requested
-        }
-
-    if not persona_rows:
-        print("No personas to process.")
-        return
-
-    if MAX_PERSONAS is not None:
-        persona_rows = dict(list(persona_rows.items())[:MAX_PERSONAS])
-        print(f"Limit: capped to {MAX_PERSONAS} persona(s)")
-
-    total_rows = sum(len(rows) for rows in persona_rows.values())
-    print(
-        f"Processing {len(persona_rows)} persona(s), "
-        f"{total_rows} rows total"
-    )
+    if MAX_SAMPLES is not None:
+        raw_rows = raw_rows[:MAX_SAMPLES]
+        print(f"Limit: capped to {MAX_SAMPLES} sample(s)")
 
     # ── Resume support ───────────────────────────────────────────────────────
-    done_keys, persona_trees = _load_checkpoint(output_file)
-    print(
-        f"Checkpoint: {len(done_keys)} rows written, "
-        f"{len(persona_trees)} persona tree(s) recovered"
-    )
+    done_queries = _load_checkpoint(output_file)
+    pending = [r for r in raw_rows if r["query"] not in done_queries]
+    print(f"Checkpoint: {len(done_queries)} rows written | Remaining: {len(pending)}")
 
-    # ── Phase 1 & 2: Build and fill tree once per persona ───────────────────
-    personas_to_build = [
-        name for name in persona_rows
-        if name not in persona_trees
-    ]
+    if not pending:
+        print("All samples already processed.")
+        return
 
-    if personas_to_build:
-        print(f"\nPhase 1+2: Building memory trees for {len(personas_to_build)} persona(s) ...")
-        semaphore = asyncio.Semaphore(CONCURRENCY)
+    total = len(raw_rows)
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+    lock = asyncio.Lock()
+    counter = [len(done_queries)]   # mutable int shared across coroutines
 
-        async with get_vertex_ai_client(MODEL_LOCATION) as client:
-
-            # Phase 1: generate skeletons for all personas concurrently
-            print("  Phase 1: Generating subcategory skeletons ...")
-            skeleton_tasks = []
-            for name in personas_to_build:
-                # All rows for the same persona share identical flat memory lists
-                memories = persona_rows[name][0]["memories"]
-                skeleton_tasks.append(
-                    _generate_skeleton(client, memories, semaphore)
-                )
-
-            skeletons = await asyncio.gather(*skeleton_tasks)
-
-            for name, skeleton in zip(personas_to_build, skeletons):
-                total_subcats = sum(len(v) for v in skeleton.values())
-                print(f"    {name}: {total_subcats} subcategories across 11 categories")
-
-            # Phase 2: fill trees for all personas concurrently
-            print("  Phase 2: Filling trees with memories ...")
-            fill_tasks = []
-            for name, skeleton in zip(personas_to_build, skeletons):
-                memories = persona_rows[name][0]["memories"]
-                fill_tasks.append(
-                    _fill_tree(client, memories, skeleton, semaphore)
-                )
-
-            trees = await asyncio.gather(*fill_tasks)
-
-            for name, tree in zip(personas_to_build, trees):
-                persona_trees[name] = tree
-                mem_count = sum(
-                    len(mems)
-                    for cat_node in tree.values()
-                    for mems in cat_node.values()
-                )
-                print(f"    {name}: {mem_count} memories placed in tree")
-    else:
-        print("\nPhase 1+2: All persona trees recovered from checkpoint.")
-
-    # ── Phase 3: Write sample rows ───────────────────────────────────────────
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    counter = len(done_keys)
 
-    print(f"\nPhase 3: Writing sample rows ...")
-    with open(output_file, "a", encoding="utf-8") as out_file:
-        for name, rows in persona_rows.items():
-            tree = persona_trees[name]
-            for raw_row in rows:
-                if _row_key(raw_row) in done_keys:
-                    continue
-                out_row = _build_sample_row(raw_row, tree)
-                out_file.write(json.dumps(out_row, ensure_ascii=False) + "\n")
-                out_file.flush()
-                counter += 1
-                task_preview = raw_row.get("task", "")[:50]
-                print(f"[{counter}/{total_rows}] {name}: {task_preview}...")
+    print(f"\nBuilding memory trees for {len(pending)} sample(s) ...")
+    async with get_vertex_ai_client(MODEL_LOCATION) as client:
+        with open(output_file, "a", encoding="utf-8") as out_file:
+            tasks = [
+                _process_sample(
+                    row, client, semaphore, out_file, lock, counter, total
+                )
+                for row in pending
+            ]
+            await asyncio.gather(*tasks)
 
-    print(f"\nDone! {counter} rows saved to {output_file}")
+    print(f"\nDone! {counter[0]} rows saved to {output_file}")
 
 
 if __name__ == "__main__":
