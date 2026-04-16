@@ -50,7 +50,7 @@ User memories are organized into the following categories. When saving new memor
 - **legal**       – legal issues, contracts, court matters, rights, criminal record, official documents
 - **schedule**    – appointments, routines, recurring events, time-based plans, daily habits
 
-Memories provided to you in the `{memories}` section below are organized as a **two-level tree**: each top-level category (e.g. `[health]`) contains one or more subcategories (e.g. `  [physical health]`), and each subcategory holds the individual memories that belong to it. The format is:
+Memories provided to you in the memories section below are organized as a **two-level tree**: each top-level category (e.g. `[health]`) contains one or more subcategories (e.g. `  [physical health]`), and each subcategory holds the individual memories that belong to it. The format is:
 
 ```
 [category]
