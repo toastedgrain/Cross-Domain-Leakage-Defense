@@ -52,8 +52,8 @@ from benchmark.work_planner import (
 Checkpoint: TypeAlias = dict[str, Any]
 
 # Run-level retry defaults
-RUN_RETRY_MAX_ATTEMPTS = 5
-RUN_RETRY_DELAY_SECONDS = 30
+RUN_RETRY_MAX_ATTEMPTS = 10
+RUN_RETRY_DELAY_SECONDS = 60
 RUN_RETRY_CONCURRENCY_FACTOR = 0.5
 
 
