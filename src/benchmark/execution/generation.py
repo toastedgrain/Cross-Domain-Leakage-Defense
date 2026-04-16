@@ -641,6 +641,15 @@ def _prepare_generation_batch_items(
             "system_prompt": generation_prompt,
             "user_message": user_message,
         }
+
+        if PRINT_PROMPTS:
+            print(f"\n{'='*80}")
+            print(f"MODEL: {task.model.name}")
+            print(f"{'='*80}")
+            print(f"--- SYSTEM PROMPT ---\n{generation_prompt}")
+            print(f"--- USER MESSAGE ---\n{user_message}")
+            print(f"{'='*80}\n")
+
         batch_items.append(single_item)
 
     return batch_items
