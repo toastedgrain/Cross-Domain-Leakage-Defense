@@ -47,7 +47,7 @@ from benchmark.work_planner import InputEntry, WorkItem
 BATCH_REQUEST_DELIMITER = "__"
 PHASE_GENERATION = "generation"
 ERROR_EMPTY_RESPONSE = "Empty or whitespace-only response"
-PRINT_PROMPTS = False
+PRINT_PROMPTS = True
 
 __all__ = [
     "BATCH_REQUEST_DELIMITER",
@@ -154,13 +154,8 @@ def _format_generation_memories(
         lines: list[str] = []
         for cat in categories:
             subcats = tree[cat]
-            # Skip completely empty categories to keep the prompt clean
-            if not any(subcats.values()):
-                continue
             lines.append(f"[{cat}]")
             for sub, mems in subcats.items():
-                if not mems:
-                    continue
                 lines.append(f"  [{sub}]")
                 for mem in mems:
                     lines.append(f"    - {mem}")

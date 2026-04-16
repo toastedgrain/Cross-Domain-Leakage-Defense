@@ -280,6 +280,48 @@ def _merge_partitioned_cim_entries(
     return entries
 
 
+def _merge_tree_persistbench_entries(config: BenchmarkConfig) -> list[InputEntry]:
+    """PersistBench tree loader.
+
+    Base metadata (query, failure_type, hash_id) always comes from
+    ``config.input`` (the baseline flat JSONL).  ``model.input`` provides the
+    two-level tree memories (``{"category": {"subcategory": ["memory", …], …},
+    …}``) which are matched by hash_id and stored per-model so
+    ``_format_generation_memories`` renders them as a structured tree in the
+    prompt.  If a model has no ``input`` override, or its override is the same
+    file as ``config.input``, the base entry's tree_memories (if present) or
+    flat memories are used as a fallback.
+    """
+    base_entries = load_and_validate_entries(config.input)
+    base_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in base_entries}
+
+    merged: dict[str, InputEntry] = {}
+    for model in config.models:
+        if model.input is not None and model.input != config.input:
+            mem_entries = load_and_validate_entries(model.input)
+            mem_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in mem_entries}
+        else:
+            mem_by_hash = base_by_hash
+
+        for hash_id, base_entry in base_by_hash.items():
+            source = mem_by_hash.get(hash_id, base_entry)
+            # Prefer the full two-level tree dict; fall back to flat list
+            model_mems = source.get("tree_memories") or list(source["memories"])
+
+            if hash_id in merged:
+                merged[hash_id]["model_affinity"].add(model.name)
+                merged[hash_id]["model_memories"][model.name] = model_mems
+            else:
+                entry = dict(base_entry)
+                entry["model_affinity"] = {model.name}
+                entry["model_memories"] = {model.name: model_mems}
+                merged[hash_id] = entry
+
+    entries = list(merged.values())
+    print(f"PersistBench tree mode: {len(entries)} entries across {len(config.models)} model(s)")
+    return entries
+
+
 def _merge_tree_cim_entries(config: BenchmarkConfig) -> list[InputEntry]:
     """CIM tree loader.
 
@@ -340,6 +382,8 @@ def _load_dataset_entries(config: BenchmarkConfig, effective_dataset: str) -> li
             return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=False)
         elif config.method == "partitioned_labeled":
             return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=True)
+        elif config.method == "tree":
+            return _merge_tree_persistbench_entries(config)
         return load_and_validate_entries(config.input)
     else:
         raise FatalBenchmarkError(

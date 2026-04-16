@@ -1,9 +1,10 @@
 TODO
-fix per-model input when using partitioned/tree, benchmark still loads main input file -- it's currently broken
-remove redudent queries from cim samples -- all samples have the same query
-look into deepseek labeling, fix format and voting
-add per-model output path -- this will be helpful when running more results
-build cim tree by using (label, memory) pairs to help the model get better context -- right now it only uses the flat list of memories
+-fix per-model input when using partitioned/tree, benchmark still loads main input file -- it's currently broken
+-remove redudent queries from cim samples -- all samples have the same query
+-look into deepseek labeling, fix format and voting
+-add per-model output path -- this will be helpful when running more results
+-build cim tree by using (label, memory) pairs to help the model get better context -- right now it only uses the flat list of memories
+-change benchmark_runner.py to check method, and have one function to handle both dataset per method instaed of having one for each dataset
 
 Done:
 fix persistbench partitioned_labeled
