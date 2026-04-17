@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+from openai import APIConnectionError, RateLimitError
 from tenacity import (
     retry,
     retry_if_not_exception_type,
@@ -441,6 +442,8 @@ async def judge_response(
             )
     except (FatalBenchmarkError, NonRetryableError):
         raise
+    except (RateLimitError, APIConnectionError):
+        raise
     except Exception as e:
         raise NonRetryableError(
             f"Failed to parse judge response: {type(e).__name__}: {e}"
@@ -523,6 +526,8 @@ async def judge_response_cim(
                 "Supported values: 'vertexai', 'openrouter', 'gemini'"
             )
     except (FatalBenchmarkError, NonRetryableError):
+        raise
+    except (RateLimitError, APIConnectionError):
         raise
     except Exception as e:
         raise NonRetryableError(

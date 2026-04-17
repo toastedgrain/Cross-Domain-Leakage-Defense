@@ -56,7 +56,7 @@ def _fmt(val: float, std: float) -> str:
     return f"{val:5.2f} +/- {std:4.2f}"
 
 
-_STRATEGY_SUBDIRS = ("baseline", "defense", "partitioned")
+_STRATEGY_SUBDIRS = ("baseline", "defense", "partitioned", "rag")
 
 
 def _derive_strategy_name(subdir: str, file_stem: str) -> str:
