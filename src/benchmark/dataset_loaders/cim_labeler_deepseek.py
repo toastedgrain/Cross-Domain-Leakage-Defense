@@ -92,7 +92,7 @@ class LabelingConfig:
     input_path: Path = field(default_factory=lambda: DEFAULT_INPUT_FILE)
     model_name: str = "DeepSeek-V3.2"
     provider: str = "azure"
-    base_url: str | None = "https://hakee-mnp860ah-eastus2.services.ai.azure.com/openai/v1/"
+    base_url: str | None = "https://hakee-mns1muqh-swedencentral.services.ai.azure.com/openai/v1/"
     api_key_env: str = "AZURE_OPENAI_API_KEY"
     samples_per_persona: int = 10
     concurrency: int = 250
@@ -428,9 +428,9 @@ def aggregate_labels(
                     persona_votes.append(None)
 
             non_null = [v for v in persona_votes if v is not None]
-            if non_null.count("necessary") >= 2:
+            if non_null.count("necessary") >= 3:
                 group_pair[attr] = "necessary"
-            elif non_null.count("inappropriate") >= 2:
+            elif non_null.count("inappropriate") >= 3:
                 group_pair[attr] = "inappropriate"
             else:
                 group_pair[attr] = None
