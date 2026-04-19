@@ -1,0 +1,1331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CIM Raw Signal Viewer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: rgba(7, 20, 36, 0.72);
+      --panel-strong: rgba(10, 25, 44, 0.88);
+      --panel-soft: rgba(96, 182, 255, 0.08);
+      --line: rgba(129, 208, 255, 0.16);
+      --line-strong: rgba(129, 208, 255, 0.32);
+      --text: #ebf7ff;
+      --muted: #93acc2;
+      --accent: #74f7d5;
+      --accent-2: #72b4ff;
+      --accent-3: #ffd166;
+      --danger: #ff7f9f;
+      --shadow: 0 30px 80px rgba(0, 0, 0, 0.42);
+      --radius-xl: 28px;
+      --radius-lg: 20px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --font-sans: "Avenir Next", "Segoe UI", "Trebuchet MS", "Helvetica Neue", Arial, sans-serif;
+      --font-mono: "SFMono-Regular", "Cascadia Code", "Consolas", "Liberation Mono", monospace;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      min-height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(116, 247, 213, 0.16), transparent 28%),
+        radial-gradient(circle at top right, rgba(114, 180, 255, 0.18), transparent 24%),
+        linear-gradient(160deg, #06101d 0%, #09182b 48%, #050c16 100%);
+      color: var(--text);
+      font-family: var(--font-sans);
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    body::before {
+      background:
+        linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: radial-gradient(circle at center, black 35%, transparent 100%);
+      opacity: 0.5;
+    }
+
+    body::after {
+      background:
+        radial-gradient(circle at 15% 15%, rgba(116, 247, 213, 0.14), transparent 18%),
+        radial-gradient(circle at 85% 22%, rgba(114, 180, 255, 0.14), transparent 20%),
+        radial-gradient(circle at 50% 100%, rgba(255, 209, 102, 0.08), transparent 24%);
+      filter: blur(36px);
+    }
+
+    .app {
+      position: relative;
+      z-index: 1;
+      width: min(1500px, calc(100vw - 32px));
+      margin: 24px auto 40px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(20px);
+    }
+
+    .hero {
+      overflow: hidden;
+      position: relative;
+      padding: 28px;
+    }
+
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: -25% auto auto 55%;
+      width: 320px;
+      height: 320px;
+      background: radial-gradient(circle, rgba(116, 247, 213, 0.22), transparent 72%);
+      pointer-events: none;
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(116, 247, 213, 0.28);
+      background: rgba(116, 247, 213, 0.08);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      color: var(--accent);
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      margin-top: 14px;
+      font-size: clamp(2.2rem, 4vw, 4rem);
+      line-height: 0.98;
+      letter-spacing: -0.04em;
+      max-width: 10ch;
+    }
+
+    .hero-copy {
+      max-width: 720px;
+    }
+
+    .hero-copy p {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.7;
+      max-width: 66ch;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    button,
+    .button-label,
+    select,
+    input {
+      font: inherit;
+    }
+
+    .action-button,
+    .ghost-button {
+      border: 1px solid var(--line-strong);
+      border-radius: 999px;
+      padding: 12px 16px;
+      min-height: 46px;
+      color: var(--text);
+      cursor: pointer;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }
+
+    .action-button {
+      background: linear-gradient(135deg, rgba(114, 180, 255, 0.24), rgba(116, 247, 213, 0.16));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    .ghost-button {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .action-button:hover,
+    .ghost-button:hover,
+    .dropzone:hover {
+      transform: translateY(-1px);
+      border-color: rgba(116, 247, 213, 0.48);
+    }
+
+    .dropzone {
+      margin-top: 22px;
+      display: grid;
+      gap: 16px;
+      padding: 22px;
+      border-radius: var(--radius-lg);
+      border: 1px dashed rgba(116, 247, 213, 0.28);
+      background:
+        linear-gradient(140deg, rgba(116, 247, 213, 0.08), rgba(114, 180, 255, 0.06)),
+        rgba(6, 16, 30, 0.46);
+      transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+    }
+
+    .dropzone.is-dragging {
+      border-color: rgba(255, 209, 102, 0.72);
+      background:
+        linear-gradient(140deg, rgba(255, 209, 102, 0.12), rgba(116, 247, 213, 0.12)),
+        rgba(6, 16, 30, 0.7);
+      transform: scale(1.005);
+    }
+
+    .dropzone strong {
+      display: block;
+      font-size: 1.05rem;
+    }
+
+    .dropzone p {
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .dropzone-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 20px;
+    }
+
+    .stat-card {
+      padding: 16px 18px;
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.02));
+    }
+
+    .stat-card span {
+      display: block;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.74rem;
+    }
+
+    .stat-card strong {
+      display: block;
+      margin-top: 8px;
+      font-size: clamp(1.4rem, 2vw, 2.2rem);
+      letter-spacing: -0.04em;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 330px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .sidebar,
+    .detail {
+      padding: 20px;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .section-header h2 {
+      font-size: 1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .section-header span {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .user-list {
+      display: grid;
+      gap: 10px;
+      max-height: calc(100vh - 270px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .user-card {
+      width: 100%;
+      text-align: left;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.03);
+      color: inherit;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .user-card:hover {
+      transform: translateX(2px);
+      border-color: var(--line);
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .user-card.active {
+      border-color: rgba(116, 247, 213, 0.46);
+      background:
+        linear-gradient(135deg, rgba(116, 247, 213, 0.12), rgba(114, 180, 255, 0.08)),
+        rgba(255, 255, 255, 0.04);
+      box-shadow: inset 0 0 0 1px rgba(116, 247, 213, 0.08);
+    }
+
+    .user-card strong,
+    .identity-card strong,
+    .event-card strong,
+    .attribute-card strong {
+      display: block;
+    }
+
+    .user-card strong {
+      font-size: 1rem;
+      margin-bottom: 6px;
+    }
+
+    .user-card .user-meta,
+    .identity-card .identity-meta,
+    .attribute-card .attribute-key,
+    .attribute-card .attribute-memory,
+    .empty-state p,
+    .pill-row small,
+    .helper-note {
+      color: var(--muted);
+    }
+
+    .user-meta,
+    .identity-meta,
+    .helper-note {
+      line-height: 1.5;
+      font-size: 0.9rem;
+    }
+
+    .detail {
+      display: grid;
+      gap: 16px;
+    }
+
+    .identity-card,
+    .control-bar,
+    .event-card,
+    .empty-state {
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--line);
+      background: var(--panel-strong);
+    }
+
+    .identity-card {
+      padding: 22px;
+      display: grid;
+      gap: 16px;
+    }
+
+    .identity-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .identity-card h3 {
+      font-size: clamp(1.8rem, 3vw, 2.8rem);
+      letter-spacing: -0.05em;
+    }
+
+    .identity-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .identity-tile {
+      padding: 14px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.035);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      min-height: 100%;
+    }
+
+    .identity-tile span {
+      display: block;
+      text-transform: uppercase;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .identity-tile strong {
+      font-size: 1rem;
+      line-height: 1.45;
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.035);
+      font-size: 0.88rem;
+      line-height: 1.2;
+    }
+
+    .pill.is-accent {
+      border-color: rgba(116, 247, 213, 0.28);
+      color: var(--accent);
+    }
+
+    .pill.is-warm {
+      border-color: rgba(255, 209, 102, 0.28);
+      color: var(--accent-3);
+    }
+
+    .control-bar {
+      padding: 16px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) repeat(2, minmax(180px, 0.7fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      min-height: 46px;
+      padding: 0 14px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      outline: none;
+    }
+
+    .field input:focus,
+    .field select:focus {
+      border-color: rgba(116, 247, 213, 0.46);
+      box-shadow: 0 0 0 3px rgba(116, 247, 213, 0.12);
+    }
+
+    .events {
+      display: grid;
+      gap: 14px;
+    }
+
+    .event-card {
+      padding: 18px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .event-card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 3px;
+      background: linear-gradient(180deg, var(--accent), transparent 80%);
+      opacity: 0.7;
+    }
+
+    .event-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 14px;
+      flex-wrap: wrap;
+    }
+
+    .event-top h3 {
+      font-size: 1.16rem;
+      letter-spacing: -0.03em;
+      margin-bottom: 6px;
+    }
+
+    .event-summary {
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+    }
+
+    .domain-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 12px;
+    }
+
+    .domain-card {
+      border-radius: 16px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .domain-card h4 {
+      margin: 0;
+      font-size: 0.84rem;
+      color: var(--accent-2);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    .attribute-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .attribute-card {
+      padding: 13px;
+      border-radius: 14px;
+      background: var(--panel-soft);
+      border: 1px solid rgba(129, 208, 255, 0.12);
+    }
+
+    .attribute-card strong {
+      font-size: 0.96rem;
+      line-height: 1.35;
+    }
+
+    .attribute-value {
+      margin-top: 8px;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.96rem;
+    }
+
+    .attribute-key,
+    .attribute-memory {
+      margin-top: 10px;
+      font-size: 0.82rem;
+      line-height: 1.55;
+    }
+
+    .attribute-key code {
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      color: #c5e6ff;
+    }
+
+    .empty-state {
+      padding: 24px;
+      text-align: center;
+    }
+
+    .empty-state strong {
+      display: block;
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+
+    .sr-only,
+    #file-input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    .footer-note {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.84rem;
+      padding-bottom: 8px;
+    }
+
+    @media (max-width: 1100px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .user-list {
+        max-height: 320px;
+      }
+
+      .identity-grid,
+      .stat-grid,
+      .control-bar {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 720px) {
+      .app {
+        width: min(100vw - 18px, 100%);
+        margin: 10px auto 22px;
+      }
+
+      .hero,
+      .sidebar,
+      .detail {
+        padding: 16px;
+      }
+
+      .identity-grid,
+      .stat-grid,
+      .control-bar {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-top,
+      .identity-top,
+      .event-top {
+        flex-direction: column;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="panel hero">
+      <div class="hero-top">
+        <div class="hero-copy">
+          <div class="eyebrow">CIM Raw Signal Viewer</div>
+          <h1>Drag in a raw file. Inspect every user clearly.</h1>
+          <p>
+            Built for the JSON structure in this directory. Drop a raw CIM file anywhere on the page,
+            browse users on the left, then filter the selected profile by event, domain, or free-text search.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <label class="action-button button-label" for="file-input">Open JSON File</label>
+          <button id="clear-session" class="ghost-button" type="button">Clear Session</button>
+        </div>
+      </div>
+
+      <input id="file-input" type="file" accept=".json,application/json">
+
+      <div id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="Drop a raw JSON file or click to choose one">
+        <div>
+          <strong>Drop `cim_raw.json`, `cim_extended_raw.json`, or any compatible raw export here</strong>
+          <p>
+            The file stays in your browser session. This viewer parses the JSON client-side and restores the
+            last loaded file from local storage so you can reopen the HTML and continue where you left off.
+          </p>
+        </div>
+        <div id="dropzone-meta" class="dropzone-meta">
+          <span>No dataset loaded</span>
+        </div>
+      </div>
+
+      <div id="stats" class="stat-grid" aria-live="polite"></div>
+    </section>
+
+    <section class="layout">
+      <aside class="panel sidebar">
+        <div class="section-header">
+          <h2>Users</h2>
+          <span id="user-count">0 loaded</span>
+        </div>
+        <div id="user-list" class="user-list"></div>
+      </aside>
+
+      <section class="panel detail">
+        <article id="identity-card" class="identity-card"></article>
+
+        <section class="control-bar">
+          <div class="field">
+            <label for="search-input">Search</label>
+            <input id="search-input" type="search" placeholder="Search key, value, or memory statement">
+          </div>
+          <div class="field">
+            <label for="event-filter">Event</label>
+            <select id="event-filter"></select>
+          </div>
+          <div class="field">
+            <label for="domain-filter">Domain</label>
+            <select id="domain-filter"></select>
+          </div>
+        </section>
+
+        <div id="events" class="events"></div>
+      </section>
+    </section>
+
+    <div class="footer-note">Shortcut: press `/` to focus search. Press `Esc` to clear active filters.</div>
+  </main>
+
+  <script>
+    const STORAGE_KEY = "cim-raw-viewer:last-file";
+    const state = {
+      datasetName: "",
+      records: [],
+      selectedIndex: 0,
+      search: "",
+      eventFilter: "all",
+      domainFilter: "all"
+    };
+
+    const dropzone = document.getElementById("dropzone");
+    const fileInput = document.getElementById("file-input");
+    const clearSessionButton = document.getElementById("clear-session");
+    const dropzoneMeta = document.getElementById("dropzone-meta");
+    const statsElement = document.getElementById("stats");
+    const userCountElement = document.getElementById("user-count");
+    const userListElement = document.getElementById("user-list");
+    const identityCardElement = document.getElementById("identity-card");
+    const searchInput = document.getElementById("search-input");
+    const eventFilter = document.getElementById("event-filter");
+    const domainFilter = document.getElementById("domain-filter");
+    const eventsElement = document.getElementById("events");
+
+    function slugify(value) {
+      return String(value || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(/^_+|_+$/g, "");
+    }
+
+    function titleCase(value) {
+      return String(value || "")
+        .replace(/[_-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .replace(/\b\w/g, (letter) => letter.toUpperCase());
+    }
+
+    function formatPrimitive(value) {
+      if (value === null || value === undefined || value === "") {
+        return "No value";
+      }
+      if (typeof value === "boolean") {
+        return value ? "Yes" : "No";
+      }
+      if (typeof value === "number") {
+        return Number.isInteger(value) ? value.toLocaleString() : value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+      }
+      if (Array.isArray(value)) {
+        return value.map(formatPrimitive).join(", ");
+      }
+      if (typeof value === "object") {
+        return JSON.stringify(value, null, 2);
+      }
+      return String(value);
+    }
+
+    function isIsoDate(value) {
+      return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value);
+    }
+
+    function formatDate(value) {
+      if (!isIsoDate(value)) {
+        return null;
+      }
+      const date = new Date(value + "T00:00:00");
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+      return new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric"
+      }).format(date);
+    }
+
+    function cleanLabel(key, event, domain) {
+      let cleaned = String(key || "");
+      const eventSlug = slugify(event);
+      const domainSlug = slugify(domain);
+
+      if (eventSlug && cleaned.startsWith(eventSlug + "_")) {
+        cleaned = cleaned.slice(eventSlug.length + 1);
+      }
+
+      if (domainSlug && cleaned.startsWith(domainSlug + "_")) {
+        cleaned = cleaned.slice(domainSlug.length + 1);
+      }
+
+      return titleCase(cleaned);
+    }
+
+    function normalizeRecords(payload) {
+      const records = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.users)
+          ? payload.users
+          : Array.isArray(payload?.records)
+            ? payload.records
+            : payload
+              ? [payload]
+              : [];
+
+      return records.map((record, index) => {
+        const bio = record?.bio || {};
+        const attributesObject = record?.information_attributes || {};
+        const attributes = Object.entries(attributesObject).map(([key, attribute]) => {
+          const domain = attribute?.information_domain || "general";
+          const event = attribute?.event || "general";
+          const rawValue = attribute?.value;
+          const displayValue = formatPrimitive(rawValue);
+          const formattedDate = formatDate(rawValue);
+          const label = cleanLabel(key, event, domain);
+
+          return {
+            key,
+            label,
+            domain,
+            event,
+            rawValue,
+            displayValue: formattedDate ? formattedDate + " (" + rawValue + ")" : displayValue,
+            memoryStatement: attribute?.memory_statement || "",
+            searchBlob: [
+              key,
+              label,
+              domain,
+              event,
+              displayValue,
+              attribute?.memory_statement || ""
+            ].join(" ").toLowerCase()
+          };
+        });
+
+        const events = Array.from(new Set(attributes.map((item) => item.event))).sort((a, b) => {
+          if (a === "general") return -1;
+          if (b === "general") return 1;
+          return a.localeCompare(b);
+        });
+        const domains = Array.from(new Set(attributes.map((item) => item.domain))).sort((a, b) => a.localeCompare(b));
+        const name = bio.name || bio.full_name || attributesObject.full_name?.value || attributesObject.name?.value || "Unnamed User";
+        const importantDates = attributes
+          .filter((item) => isIsoDate(item.rawValue))
+          .sort((a, b) => String(a.rawValue).localeCompare(String(b.rawValue)))
+          .slice(0, 5);
+
+        return {
+          id: index,
+          name,
+          bio,
+          attributes,
+          events,
+          domains,
+          importantDates
+        };
+      });
+    }
+
+    function summarizeDataset(records) {
+      const attributeCount = records.reduce((sum, record) => sum + record.attributes.length, 0);
+      const events = new Set();
+      const domains = new Set();
+
+      records.forEach((record) => {
+        record.events.forEach((item) => events.add(item));
+        record.domains.forEach((item) => domains.add(item));
+      });
+
+      return {
+        users: records.length,
+        attributes: attributeCount,
+        events: events.size,
+        domains: domains.size
+      };
+    }
+
+    function groupedAttributes(record) {
+      const search = state.search.trim().toLowerCase();
+
+      const filtered = record.attributes.filter((item) => {
+        const eventPass = state.eventFilter === "all" || item.event === state.eventFilter;
+        const domainPass = state.domainFilter === "all" || item.domain === state.domainFilter;
+        const searchPass = !search || item.searchBlob.includes(search);
+        return eventPass && domainPass && searchPass;
+      });
+
+      const grouped = new Map();
+
+      filtered.forEach((item) => {
+        if (!grouped.has(item.event)) {
+          grouped.set(item.event, new Map());
+        }
+        const domainMap = grouped.get(item.event);
+        if (!domainMap.has(item.domain)) {
+          domainMap.set(item.domain, []);
+        }
+        domainMap.get(item.domain).push(item);
+      });
+
+      return grouped;
+    }
+
+    function renderStats() {
+      const summary = summarizeDataset(state.records);
+      const cards = [
+        { label: "Users", value: summary.users },
+        { label: "Attributes", value: summary.attributes },
+        { label: "Events", value: summary.events },
+        { label: "Domains", value: summary.domains }
+      ];
+
+      statsElement.innerHTML = cards.map((card) => `
+        <div class="stat-card">
+          <span>${card.label}</span>
+          <strong>${card.value.toLocaleString()}</strong>
+        </div>
+      `).join("");
+    }
+
+    function renderUserList() {
+      userCountElement.textContent = state.records.length + " loaded";
+
+      if (!state.records.length) {
+        userListElement.innerHTML = `
+          <div class="empty-state">
+            <strong>No users loaded</strong>
+            <p>Drop a compatible raw JSON file to populate the viewer.</p>
+          </div>
+        `;
+        return;
+      }
+
+      userListElement.innerHTML = state.records.map((record, index) => {
+        const activeClass = index === state.selectedIndex ? "active" : "";
+        return `
+          <button class="user-card ${activeClass}" type="button" data-index="${index}">
+            <strong>${escapeHtml(record.name)}</strong>
+            <div class="user-meta">
+              ${record.attributes.length.toLocaleString()} attributes<br>
+              ${record.events.length} events · ${record.domains.length} domains
+            </div>
+          </button>
+        `;
+      }).join("");
+
+      Array.from(userListElement.querySelectorAll(".user-card")).forEach((button) => {
+        button.addEventListener("click", () => {
+          state.selectedIndex = Number(button.dataset.index);
+          render();
+        });
+      });
+    }
+
+    function bioEntries(record) {
+      const bio = record.bio || {};
+      const orderedKeys = ["name", "full_name", "sex", "gender_identity", "age", "address"];
+      const seen = new Set();
+      const entries = [];
+
+      orderedKeys.forEach((key) => {
+        if (bio[key] !== undefined && bio[key] !== null && bio[key] !== "") {
+          entries.push([key, bio[key]]);
+          seen.add(key);
+        }
+      });
+
+      Object.entries(bio).forEach(([key, value]) => {
+        if (!seen.has(key) && value !== undefined && value !== null && value !== "") {
+          entries.push([key, value]);
+        }
+      });
+
+      return entries.slice(0, 8);
+    }
+
+    function renderIdentityCard() {
+      const record = state.records[state.selectedIndex];
+
+      if (!record) {
+        identityCardElement.innerHTML = `
+          <div class="empty-state">
+            <strong>Viewer is standing by</strong>
+            <p>Load a dataset to inspect user-level attributes and memory statements.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const bioMarkup = bioEntries(record).map(([key, value]) => `
+        <div class="identity-tile">
+          <span>${titleCase(key)}</span>
+          <strong>${escapeHtml(formatPrimitive(value))}</strong>
+        </div>
+      `).join("");
+
+      const dateMarkup = record.importantDates.length
+        ? record.importantDates.map((item) => `<span class="pill is-warm">${escapeHtml(item.label)} · ${escapeHtml(formatDate(item.rawValue) || String(item.rawValue))}</span>`).join("")
+        : `<small>No ISO-style dates in this profile.</small>`;
+
+      const eventMarkup = record.events.map((event) => `<span class="pill is-accent">${escapeHtml(titleCase(event))}</span>`).join("");
+      const domainMarkup = record.domains.map((domain) => `<span class="pill">${escapeHtml(titleCase(domain))}</span>`).join("");
+
+      identityCardElement.innerHTML = `
+        <div class="identity-top">
+          <div>
+            <div class="eyebrow">Selected User</div>
+            <h3>${escapeHtml(record.name)}</h3>
+            <p class="identity-meta">
+              ${record.attributes.length.toLocaleString()} attributes across ${record.events.length} events and ${record.domains.length} domains.
+            </p>
+          </div>
+          <div class="pill-row">
+            <span class="pill is-accent">Profile ${state.selectedIndex + 1}</span>
+            <span class="pill">${escapeHtml(state.datasetName || "Untitled Dataset")}</span>
+          </div>
+        </div>
+
+        <div class="identity-grid">${bioMarkup || `<div class="identity-tile"><span>Bio</span><strong>No bio fields found</strong></div>`}</div>
+
+        <div>
+          <p class="helper-note">Events</p>
+          <div class="pill-row">${eventMarkup}</div>
+        </div>
+
+        <div>
+          <p class="helper-note">Domains</p>
+          <div class="pill-row">${domainMarkup}</div>
+        </div>
+
+        <div>
+          <p class="helper-note">Key Dates</p>
+          <div class="pill-row">${dateMarkup}</div>
+        </div>
+      `;
+    }
+
+    function renderFilters() {
+      const record = state.records[state.selectedIndex];
+      const events = record ? ["all", ...record.events] : ["all"];
+      const domains = record ? ["all", ...record.domains] : ["all"];
+
+      eventFilter.innerHTML = events.map((value) => `
+        <option value="${escapeAttribute(value)}"${value === state.eventFilter ? " selected" : ""}>
+          ${value === "all" ? "All Events" : titleCase(value)}
+        </option>
+      `).join("");
+
+      domainFilter.innerHTML = domains.map((value) => `
+        <option value="${escapeAttribute(value)}"${value === state.domainFilter ? " selected" : ""}>
+          ${value === "all" ? "All Domains" : titleCase(value)}
+        </option>
+      `).join("");
+
+      if (!events.includes(state.eventFilter)) {
+        state.eventFilter = "all";
+        renderFilters();
+        return;
+      }
+
+      if (!domains.includes(state.domainFilter)) {
+        state.domainFilter = "all";
+        renderFilters();
+      }
+    }
+
+    function renderEvents() {
+      const record = state.records[state.selectedIndex];
+
+      if (!record) {
+        eventsElement.innerHTML = "";
+        return;
+      }
+
+      const grouped = groupedAttributes(record);
+
+      if (!grouped.size) {
+        eventsElement.innerHTML = `
+          <div class="empty-state">
+            <strong>No attributes match the current filters</strong>
+            <p>Adjust the event, domain, or text search to widen the results.</p>
+          </div>
+        `;
+        return;
+      }
+
+      const eventCards = Array.from(grouped.entries()).map(([event, domainMap]) => {
+        const attributeTotal = Array.from(domainMap.values()).reduce((sum, items) => sum + items.length, 0);
+        const domainCards = Array.from(domainMap.entries()).map(([domain, items]) => `
+          <div class="domain-card">
+            <h4>${escapeHtml(titleCase(domain))}</h4>
+            <div class="attribute-list">
+              ${items.map((item) => `
+                <article class="attribute-card">
+                  <strong>${escapeHtml(item.label)}</strong>
+                  <div class="attribute-value">${escapeHtml(item.displayValue)}</div>
+                  ${item.memoryStatement ? `<div class="attribute-memory">${escapeHtml(item.memoryStatement)}</div>` : ""}
+                  <div class="attribute-key">Key: <code>${escapeHtml(item.key)}</code></div>
+                </article>
+              `).join("")}
+            </div>
+          </div>
+        `).join("");
+
+        return `
+          <section class="event-card">
+            <div class="event-top">
+              <div>
+                <h3>${escapeHtml(titleCase(event))}</h3>
+                <div class="event-summary">${attributeTotal.toLocaleString()} matching attributes across ${domainMap.size} domains.</div>
+              </div>
+              <div class="pill-row">
+                <span class="pill is-accent">${domainMap.size} domains</span>
+                <span class="pill">${attributeTotal.toLocaleString()} items</span>
+              </div>
+            </div>
+            <div class="domain-grid">${domainCards}</div>
+          </section>
+        `;
+      }).join("");
+
+      eventsElement.innerHTML = eventCards;
+    }
+
+    function renderDatasetMeta() {
+      if (!state.records.length) {
+        dropzoneMeta.innerHTML = "<span>No dataset loaded</span>";
+        return;
+      }
+
+      const summary = summarizeDataset(state.records);
+      dropzoneMeta.innerHTML = `
+        <span><strong>${escapeHtml(state.datasetName || "Untitled Dataset")}</strong></span>
+        <span>${summary.users} users</span>
+        <span>${summary.attributes.toLocaleString()} attributes</span>
+        <span>${summary.events} events</span>
+        <span>${summary.domains} domains</span>
+      `;
+    }
+
+    function render() {
+      renderDatasetMeta();
+      renderStats();
+      renderUserList();
+      renderIdentityCard();
+      renderFilters();
+      renderEvents();
+      searchInput.value = state.search;
+    }
+
+    function loadDataset(content, datasetName) {
+      let parsed;
+      try {
+        parsed = JSON.parse(content);
+      } catch (error) {
+        window.alert("This file is not valid JSON.");
+        return;
+      }
+
+      const records = normalizeRecords(parsed).filter((record) => record.attributes.length || Object.keys(record.bio || {}).length);
+
+      if (!records.length) {
+        window.alert("No compatible records were found. Expected an array of objects with `bio` and `information_attributes`.");
+        return;
+      }
+
+      state.datasetName = datasetName || "Dropped Dataset";
+      state.records = records;
+      state.selectedIndex = 0;
+      state.search = "";
+      state.eventFilter = "all";
+      state.domainFilter = "all";
+
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        datasetName: state.datasetName,
+        content
+      }));
+
+      render();
+    }
+
+    function clearSession() {
+      localStorage.removeItem(STORAGE_KEY);
+      state.datasetName = "";
+      state.records = [];
+      state.selectedIndex = 0;
+      state.search = "";
+      state.eventFilter = "all";
+      state.domainFilter = "all";
+      render();
+    }
+
+    function readFile(file) {
+      if (!file) {
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => loadDataset(String(reader.result || ""), file.name);
+      reader.onerror = () => window.alert("Failed to read the selected file.");
+      reader.readAsText(file);
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function escapeAttribute(value) {
+      return escapeHtml(value);
+    }
+
+    fileInput.addEventListener("change", (event) => {
+      readFile(event.target.files?.[0]);
+    });
+
+    clearSessionButton.addEventListener("click", clearSession);
+
+    searchInput.addEventListener("input", (event) => {
+      state.search = event.target.value;
+      renderEvents();
+    });
+
+    eventFilter.addEventListener("change", (event) => {
+      state.eventFilter = event.target.value;
+      renderEvents();
+    });
+
+    domainFilter.addEventListener("change", (event) => {
+      state.domainFilter = event.target.value;
+      renderEvents();
+    });
+
+    dropzone.addEventListener("click", () => fileInput.click());
+    dropzone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    ["dragenter", "dragover"].forEach((type) => {
+      window.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropzone.classList.add("is-dragging");
+      });
+    });
+
+    ["dragleave", "dragend", "drop"].forEach((type) => {
+      window.addEventListener(type, (event) => {
+        event.preventDefault();
+        if (type !== "drop") {
+          dropzone.classList.remove("is-dragging");
+        }
+      });
+    });
+
+    window.addEventListener("drop", (event) => {
+      dropzone.classList.remove("is-dragging");
+      readFile(event.dataTransfer?.files?.[0]);
+    });
+
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "/" && document.activeElement !== searchInput) {
+        event.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+
+      if (event.key === "Escape") {
+        state.search = "";
+        state.eventFilter = "all";
+        state.domainFilter = "all";
+        render();
+      }
+    });
+
+    (function restoreLastFile() {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (!stored) {
+        render();
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stored);
+        if (parsed?.content) {
+          loadDataset(parsed.content, parsed.datasetName || "Restored Dataset");
+          return;
+        }
+      } catch (error) {
+        localStorage.removeItem(STORAGE_KEY);
+      }
+
+      render();
+    })();
+  </script>
+</body>
+</html>
