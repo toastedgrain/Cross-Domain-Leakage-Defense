@@ -47,7 +47,7 @@ from benchmark.work_planner import InputEntry, WorkItem
 BATCH_REQUEST_DELIMITER = "__"
 PHASE_GENERATION = "generation"
 ERROR_EMPTY_RESPONSE = "Empty or whitespace-only response"
-PRINT_PROMPTS = True
+PRINT_PROMPTS = False
 
 __all__ = [
     "BATCH_REQUEST_DELIMITER",

@@ -348,6 +348,8 @@ async def _judge_via_vertexai(
 
         try:
             response = await client.chat.completions.create(**api_params)
+        except (RateLimitError, APIConnectionError):
+            raise
         except Exception as e:
             raise RuntimeError(
                 f"Vertex AI API call failed for judge model {judge_model}. "
