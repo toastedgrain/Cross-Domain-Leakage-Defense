@@ -42,6 +42,9 @@ STRATEGIES: dict[str, str] = {
     "RAG k=3":                     "outputs/persistbench/rag/persist_rag_k3_llama3p3_70b_qwen3_235b.json",
     "RAG k=5":                     "outputs/persistbench/rag/persist_rag_k5_llama3p3_70b_qwen3_235b.json",
     "RAG k=8":                     "outputs/persistbench/rag/persist_rag_k8_llama3p3_70b_qwen3_235b.json",
+    "RAG tau=0.25":                "outputs/persistbench/rag/persist_rag_tau0.25_llama3p3_70b_qwen3_235b.json",
+    "RAG tau=0.5":                 "outputs/persistbench/rag/persist_rag_tau0.5_llama3p3_70b_qwen3_235b.json",
+    "RAG tau=0.75":                "outputs/persistbench/rag/persist_rag_tau0.75_llama3p3_70b_qwen3_235b.json",
     "Tree":                        "outputs/persistbench/tree/output_persistbench_tree_llama3p3_qwen3.json",
     "Tree Informed":               "outputs/persistbench/tree/output_persistbench_informed_tree_llama3p3_qwen3.json",
 }
