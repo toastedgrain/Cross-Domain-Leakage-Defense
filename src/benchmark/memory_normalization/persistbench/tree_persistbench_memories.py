@@ -10,30 +10,27 @@ LLM to build a full two-level tree in two sequential calls per sample:
   Phase 2 — Tree fill: assign every memory from the flat list to exactly one
              category → subcategory leaf, building the complete tree.
 
-Output memories field shape (easy to inject as a tree prompt):
+Each model in MODELS is processed sequentially and saved to its own subdirectory.
+
+Output memories field shape:
   {
     "health": {
       "physical health": ["memory1", "memory2"],
       "mental health":   ["memory3"]
     },
-    "identity": {
-      "religious beliefs": ["memory4"]
-    },
     ...
   }
 
 Usage:
-  # Process all samples
-  uv run python tree_cim_memories.py
-
-  # Override input/output paths
-  uv run python tree_cim_memories.py --input /path/to/input.jsonl --output /path/to/output.jsonl
+  uv run python tree_persistbench_memories.py
+  uv run python tree_persistbench_memories.py --input /path/to/input.jsonl
 
 ─── HOW TO EDIT ───────────────────────────────────────────────────────────────
-  * Change the model / location / temperature  ->  MODEL block below
-  * Change input/output paths                  ->  RUN CONFIG below
-  * Change concurrency or retry behaviour      ->  RUN CONFIG below
-  * Change what the LLM is told to do          ->  PROMPTS block below
+  * Add / remove models                    ->  MODELS list below
+  * Change temperature                     ->  MODEL block below
+  * Change input/output paths              ->  RUN CONFIG below
+  * Change concurrency or retry behaviour  ->  RUN CONFIG below
+  * Change what the LLM is told to do      ->  PROMPTS block below
 ───────────────────────────────────────────────────────────────────────────────
 """
 
@@ -51,19 +48,22 @@ os.environ.setdefault(
 )
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
-MODEL_NAME     = "qwen/qwen3-235b-a22b-instruct-2507-maas"
-MODEL_LOCATION = "global"   # VertexAI region where the model is deployed
+# Each entry: (model_name, location)
+MODELS = [
+    ("qwen/qwen3-235b-a22b-instruct-2507-maas", "global"),
+]
 TEMPERATURE    = 0.7
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
 CONCURRENCY     = 10    # max simultaneous API requests
-MAX_RETRIES     = 5    # retry attempts per API call on parse / API failure
-MAX_SUBCATS     = 7    # maximum subcategories per top-level category
+MAX_RETRIES     = 5     # retry attempts per API call on parse / API failure
+MAX_SUBCATS     = 7     # maximum subcategories per top-level category
 MAX_SAMPLES     = None  # max number of samples to process (None = all)
 _PROJECT_ROOT   = Path(__file__).resolve().parent.parent.parent.parent.parent  # repo root
-INPUT_FILE      = _PROJECT_ROOT / "benchmark_samples" / "persistbench" / "baseline" / "cross_domain_and_beneficial.jsonl"
-OUTPUT_FILE     = _PROJECT_ROOT / "benchmark_samples" / "persistbench" / "tree" / "qwen3_235b" / "cross_domain_and_beneficial_tree_qwene_235b.jsonl"
+INPUT_FILE      = _PROJECT_ROOT / "benchmark_samples" / "persistbench" / "baseline" / "full_benchmark.jsonl"
+OUTPUT_DIR      = _PROJECT_ROOT / "benchmark_samples" / "persistbench" / "tree"
+# Output per model: OUTPUT_DIR / <sanitized_model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── CATEGORIES ────────────────────────────────────────────────────────────────
@@ -168,6 +168,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))  # add src/ 
 from benchmark.utils import extract_json_from_response, generate_hash_id, get_vertex_ai_client  # noqa: E402
 
 
+def _sanitize_model_name(model_name: str) -> str:
+    return model_name.replace("/", "_")
+
+
+def _output_file(model_name: str) -> Path:
+    return OUTPUT_DIR / _sanitize_model_name(model_name) / "full_benchmark.jsonl"
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build a two-level memory tree for PersistBench samples.",
@@ -177,12 +185,6 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=INPUT_FILE,
         help=f"Baseline PersistBench JSONL input file (default: {INPUT_FILE})",
-    )
-    parser.add_argument(
-        "--output",
-        type=Path,
-        default=OUTPUT_FILE,
-        help=f"Output JSONL file (default: {OUTPUT_FILE})",
     )
     return parser.parse_args()
 
@@ -205,22 +207,16 @@ def _load_checkpoint(output_file: Path) -> set[str]:
 
 
 def _validate_skeleton(raw: dict) -> dict[str, list[str]]:
-    """Ensure the LLM returned a valid skeleton with all 11 categories.
-
-    Fills missing categories with a single generic subcategory. Trims each
-    category to at most MAX_SUBCATS subcategories.
-    """
+    """Ensure the LLM returned a valid skeleton with all 11 categories."""
     skeleton: dict[str, list[str]] = {}
     for cat in CATEGORIES:
         raw_subcats = raw.get(cat, [])
         if isinstance(raw_subcats, list):
-            # Keep only string entries and cap at MAX_SUBCATS
             subcats = [s for s in raw_subcats if isinstance(s, str) and s.strip()][:MAX_SUBCATS]
         else:
             subcats = []
         if not subcats:
-            subcats = [cat]   # fallback: one generic subcategory named after the category
-        # Deduplicate while preserving order
+            subcats = [cat]
         seen: set[str] = set()
         unique: list[str] = []
         for s in subcats:
@@ -236,12 +232,7 @@ def _validate_tree(
     skeleton: dict[str, list[str]],
     raw: dict,
 ) -> dict[str, dict[str, list[str]]]:
-    """Ensure every memory ends up in exactly one subcategory of some category.
-
-    Iterates through the raw model output collecting valid memory strings from
-    the flat list.  Memories the model missed or duplicated are appended to the
-    'personal' category's first subcategory as a safe fallback.
-    """
+    """Ensure every memory ends up in exactly one subcategory of some category."""
     memory_set = set(memories)
     placed: set[str] = set()
 
@@ -261,7 +252,6 @@ def _validate_tree(
             cat_node[sub] = valid
         tree[cat] = cat_node
 
-    # Fallback: memories the model missed go into 'personal' first subcategory
     personal_first = skeleton["personal"][0]
     for mem in memories:
         if mem not in placed:
@@ -273,6 +263,7 @@ def _validate_tree(
 
 async def _generate_skeleton(
     client,
+    model_name: str,
     memories: list[str],
     semaphore: asyncio.Semaphore,
 ) -> dict[str, list[str]]:
@@ -283,7 +274,7 @@ async def _generate_skeleton(
         for attempt in range(MAX_RETRIES):
             try:
                 response = await client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": SUBCATEGORY_SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
@@ -297,7 +288,6 @@ async def _generate_skeleton(
             except Exception as exc:
                 if attempt == MAX_RETRIES - 1:
                     print(f"  [WARN] Skeleton: giving up after {MAX_RETRIES} attempts: {exc}")
-                    # Fallback: one generic subcategory per category
                     return {cat: [cat] for cat in CATEGORIES}
                 await asyncio.sleep(2 ** attempt)
 
@@ -306,6 +296,7 @@ async def _generate_skeleton(
 
 async def _fill_tree(
     client,
+    model_name: str,
     memories: list[str],
     skeleton: dict[str, list[str]],
     semaphore: asyncio.Semaphore,
@@ -320,7 +311,7 @@ async def _fill_tree(
         for attempt in range(MAX_RETRIES):
             try:
                 response = await client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": FILL_SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
@@ -334,7 +325,6 @@ async def _fill_tree(
             except Exception as exc:
                 if attempt == MAX_RETRIES - 1:
                     print(f"  [WARN] Fill: giving up after {MAX_RETRIES} attempts: {exc}")
-                    # Fallback: dump all memories into 'personal' first subcategory
                     personal_first = skeleton["personal"][0]
                     tree: dict[str, dict[str, list[str]]] = {
                         cat: {sub: [] for sub in skeleton[cat]}
@@ -353,6 +343,7 @@ async def _fill_tree(
 async def _process_sample(
     raw_row: dict,
     client,
+    model_name: str,
     semaphore: asyncio.Semaphore,
     out_file,
     lock: asyncio.Lock,
@@ -364,8 +355,8 @@ async def _process_sample(
     hash_id = raw_row.get("hash_id") or generate_hash_id(memories, raw_row["query"])
 
     if memories:
-        skeleton = await _generate_skeleton(client, memories, semaphore)
-        tree = await _fill_tree(client, memories, skeleton, semaphore)
+        skeleton = await _generate_skeleton(client, model_name, memories, semaphore)
+        tree = await _fill_tree(client, model_name, memories, skeleton, semaphore)
     else:
         skeleton = {cat: [cat] for cat in CATEGORIES}
         tree = {cat: {cat: []} for cat in CATEGORIES}
@@ -383,16 +374,49 @@ async def _process_sample(
         out_file.write(json.dumps(out_row, ensure_ascii=False) + "\n")
         out_file.flush()
         counter[0] += 1
-        query_preview = raw_row["query"][:70]
-        print(f"[{counter[0]}/{total}] {query_preview}...")
+        print(f"  [{counter[0]}/{total}] {raw_row['query'][:70]}...")
+
+
+async def _run_model(
+    model_name: str,
+    location: str,
+    raw_rows: list[dict],
+) -> None:
+    """Process all samples for a single model."""
+    output_file = _output_file(model_name)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    done_queries = _load_checkpoint(output_file)
+    pending = [r for r in raw_rows if r["query"] not in done_queries]
+    print(f"  Checkpoint: {len(done_queries)} rows written | Remaining: {len(pending)}")
+
+    if not pending:
+        print("  All samples already processed.")
+        return
+
+    total = len(raw_rows)
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+    lock = asyncio.Lock()
+    counter = [len(done_queries)]
+
+    print(f"  Building memory trees for {len(pending)} sample(s) ...")
+    async with get_vertex_ai_client(location) as client:
+        with open(output_file, "a", encoding="utf-8") as out_file:
+            tasks = [
+                _process_sample(
+                    row, client, model_name, semaphore, out_file, lock, counter, total
+                )
+                for row in pending
+            ]
+            await asyncio.gather(*tasks)
+
+    print(f"  {counter[0]} rows saved to {output_file}")
 
 
 async def main() -> None:
     args = _parse_args()
     input_file: Path = args.input
-    output_file: Path = args.output
 
-    # ── Load baseline rows ───────────────────────────────────────────────────
     print(f"Loading PersistBench dataset from {input_file} ...")
     raw_rows: list[dict] = []
     with open(input_file, encoding="utf-8") as f:
@@ -406,34 +430,13 @@ async def main() -> None:
         raw_rows = raw_rows[:MAX_SAMPLES]
         print(f"Limit: capped to {MAX_SAMPLES} sample(s)")
 
-    # ── Resume support ───────────────────────────────────────────────────────
-    done_queries = _load_checkpoint(output_file)
-    pending = [r for r in raw_rows if r["query"] not in done_queries]
-    print(f"Checkpoint: {len(done_queries)} rows written | Remaining: {len(pending)}")
+    for model_name, location in MODELS:
+        print(f"\n{'─' * 60}")
+        print(f"Model: {model_name}  (location: {location})")
+        print(f"{'─' * 60}")
+        await _run_model(model_name, location, raw_rows)
 
-    if not pending:
-        print("All samples already processed.")
-        return
-
-    total = len(raw_rows)
-    semaphore = asyncio.Semaphore(CONCURRENCY)
-    lock = asyncio.Lock()
-    counter = [len(done_queries)]   # mutable int shared across coroutines
-
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    print(f"\nBuilding memory trees for {len(pending)} sample(s) ...")
-    async with get_vertex_ai_client(MODEL_LOCATION) as client:
-        with open(output_file, "a", encoding="utf-8") as out_file:
-            tasks = [
-                _process_sample(
-                    row, client, semaphore, out_file, lock, counter, total
-                )
-                for row in pending
-            ]
-            await asyncio.gather(*tasks)
-
-    print(f"\nDone! {counter[0]} rows saved to {output_file}")
+    print("\nAll models complete.")
 
 
 if __name__ == "__main__":

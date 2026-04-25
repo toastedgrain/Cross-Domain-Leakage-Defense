@@ -7,13 +7,15 @@ up to 2 new custom categories per sample when memories genuinely don't fit any
 predefined category. All other sample fields are preserved exactly as-is.
 
 Output is written incrementally so the script is safe to interrupt and resume.
+Each model in MODELS is processed sequentially and saved to its own subdirectory.
 
 ─── HOW TO EDIT ───────────────────────────────────────────────────────────────
-  • Change the model / location / temperature  →  MODEL block below
-  • Change input/output paths                  →  RUN CONFIG below
-  • Change the dataset you want to partition   →  RUN CONFIG below
-  • Change concurrency or retry behaviour      →  RUN_CONFIG below
-  • Change what the LLM is told to do          →  SYSTEM_PROMPT below
+  • Add / remove models                         →  MODELS list below
+  • Change temperature                          →  MODEL block below
+  • Change input/output paths                   →  RUN CONFIG below
+  • Change the dataset you want to partition    →  RUN CONFIG below
+  • Change concurrency or retry behaviour       →  RUN_CONFIG below
+  • Change what the LLM is told to do           →  SYSTEM_PROMPT below
 ───────────────────────────────────────────────────────────────────────────────
 """
 
@@ -30,8 +32,10 @@ os.environ.setdefault(
 )
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
-MODEL_NAME     = "meta/llama-3.3-70b-instruct-maas"
-MODEL_LOCATION = "us-central1"   # VertexAI region where the model is deployed
+# Each entry: (model_name, location)
+MODELS = [
+    ("meta/llama-3.3-70b-instruct-maas", "us-central1"),
+]
 TEMPERATURE    = 0
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -41,8 +45,9 @@ BATCH_MODE   = False # True = submit all requests via /v1/batches (cheaper, asyn
 BATCH_POLL_INTERVAL = 15  # seconds between batch status polls (grows up to 60s)
 MAX_RETRIES  = 5     # retry attempts per sample on parse / API failure
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
-INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/cross_domain_and_beneficial.jsonl"
-OUTPUT_FILE  = _PROJECT_ROOT / "benchmark_samples/partitioned_custom_categories/llama3p3_70b/full_benchmark.jsonl"
+INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
+OUTPUT_DIR   = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned_custom_categories"
+# Output per model: OUTPUT_DIR / <sanitized_model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── PROMPT ────────────────────────────────────────────────────────────────────
@@ -79,7 +84,7 @@ personal     – the broadest catch-all for individual life outside structured d
               hobbies, sports, games, cooking, travel, leisure,
               entertainment, arts & crafts, music, reading, fashion, technology
               interests, outdoor activities, pets, gardening, philosophy, personal
-              reflections, lifestyle choices, personality traits, values, opinions, 
+              reflections, lifestyle choices, personality traits, values, opinions,
               volunteering, and any other interest or pastime.
 health       – physical or mental health, medical conditions, treatments,
               medications, fitness goals, therapy, disabilities, diet for health.
@@ -158,12 +163,20 @@ PARTITION_MAP = {
 }
 
 
-def _write_partitions() -> None:
-    """Read the completed OUTPUT_FILE and split it into 3 files by failure_type."""
-    out_dir = OUTPUT_FILE.parent
+def _sanitize_model_name(model_name: str) -> str:
+    return model_name.replace("/", "_")
+
+
+def _output_file(model_name: str) -> Path:
+    return OUTPUT_DIR / _sanitize_model_name(model_name) / "full_benchmark.jsonl"
+
+
+def _write_partitions(output_file: Path) -> None:
+    """Read the completed output file and split it into files by failure_type."""
+    out_dir = output_file.parent
     partitions: dict[str, list[str]] = {key: [] for key in PARTITION_MAP}
 
-    with open(OUTPUT_FILE) as f:
+    with open(output_file) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -180,14 +193,14 @@ def _write_partitions() -> None:
             f.write("\n".join(lines))
             if lines:
                 f.write("\n")
-        print(f"Wrote {len(lines):>3} samples [{failure_type}] → {out_path}")
+        print(f"  Wrote {len(lines):>3} samples [{failure_type}] → {out_path}")
 
 
-def _load_checkpoint() -> set[str]:
+def _load_checkpoint(output_file: Path) -> set[str]:
     """Return the set of queries already written to the output file."""
     done: set[str] = set()
-    if OUTPUT_FILE.exists():
-        with open(OUTPUT_FILE) as f:
+    if output_file.exists():
+        with open(output_file) as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -208,12 +221,7 @@ def _is_valid_custom_category(name: str) -> bool:
 
 
 def _canonicalize_custom_name(name: str) -> str:
-    """Normalize morphological variants to a canonical root for deduplication.
-
-    Strips common English suffixes so that, e.g., "volunteering" and
-    "volunteer" both resolve to "volunteer" and are merged into one key.
-    Only strips when the remaining root is at least 4 characters.
-    """
+    """Normalize morphological variants to a canonical root for deduplication."""
     if name.endswith("ing"):
         root = name[:-3]
         if len(root) >= 4:
@@ -228,28 +236,18 @@ def _canonicalize_custom_name(name: str) -> str:
 def _validate_partition(
     memories: list[str], raw: dict
 ) -> dict[str, list[str]]:
-    """Ensure every input memory appears exactly once in the result.
-
-    Processes all DEFAULT_CATEGORIES first, then accepts up to
-    _CUSTOM_CAT_BLOCKLIST_CUSTOM_CAT_MAX_NEW model-created categories for memories that
-    genuinely don't fit the predefined set. Any remaining unplaced
-    memories fall back to 'personal'.
-    """
+    """Ensure every input memory appears exactly once in the result."""
     result: dict[str, list[str]] = {cat: [] for cat in DEFAULT_CATEGORIES}
     placed: set[str] = set()
 
-    # Process predefined categories first.
     for cat in DEFAULT_CATEGORIES:
         for mem in raw.get(cat, []):
             if mem in memories and mem not in placed:
                 result[cat].append(mem)
                 placed.add(mem)
 
-    # Accept custom categories proposed by the model (up to the limit).
-    # Canonicalize names so morphological variants (e.g. "volunteering" vs
-    # "volunteer") are merged into the same key.
     custom_accepted = 0
-    seen_roots: dict[str, str] = {}  # canonical_root → accepted key name
+    seen_roots: dict[str, str] = {}
     for cat, items in raw.items():
         if custom_accepted >= _CUSTOM_CAT_MAX_NEW:
             break
@@ -260,7 +258,6 @@ def _validate_partition(
         if not valid_items:
             continue
         if root in seen_roots:
-            # Merge into the already-accepted canonical key
             canonical = seen_roots[root]
             result[canonical].extend(valid_items)
         else:
@@ -270,7 +267,6 @@ def _validate_partition(
         for mem in valid_items:
             placed.add(mem)
 
-    # Fallback: anything the model missed goes to 'personal'.
     for mem in memories:
         if mem not in placed:
             result["personal"].append(mem)
@@ -280,6 +276,7 @@ def _validate_partition(
 
 async def _classify(
     client,
+    model_name: str,
     memories: list[str],
     semaphore: asyncio.Semaphore,
 ) -> dict[str, list[str]]:
@@ -290,7 +287,7 @@ async def _classify(
         for attempt in range(MAX_RETRIES):
             try:
                 response = await client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
@@ -309,7 +306,6 @@ async def _classify(
                     return fallback
                 await asyncio.sleep(2**attempt)
 
-    # unreachable, but satisfies type checker
     fallback = {cat: [] for cat in CATEGORIES}
     fallback["personal"] = list(memories)
     return fallback
@@ -318,6 +314,7 @@ async def _classify(
 async def _process_sample(
     sample: dict,
     client,
+    model_name: str,
     semaphore: asyncio.Semaphore,
     out_file,
     lock: asyncio.Lock,
@@ -325,38 +322,26 @@ async def _process_sample(
     total: int,
 ) -> None:
     memories: list[str] = sample.get("memories", [])
-
-    # Compute hash from the original flat memories BEFORE partitioning.
-    # This stable hash matches what the benchmark runner computes for the same
-    # sample from the unpartitioned full_benchmark.jsonl, so all models share
-    # one canonical hash_id regardless of how their memories are categorised.
     hash_id = sample.get("hash_id") or generate_hash_id(memories, sample["query"])
 
     if memories:
-        partition = await _classify(client, memories, semaphore)
+        partition = await _classify(client, model_name, memories, semaphore)
     else:
         partition = {cat: [] for cat in CATEGORIES}
 
-    # Preserve every original field; replace 'memories' with partition and pin hash_id.
     result = {**sample, "hash_id": hash_id, "memories": partition}
 
     async with lock:
         out_file.write(json.dumps(result, ensure_ascii=False) + "\n")
         out_file.flush()
         counter[0] += 1
-        print(f"[{counter[0]}/{total}] {sample['query'][:70]}…")
+        print(f"  [{counter[0]}/{total}] {sample['query'][:70]}…")
 
 
-async def _run_batch(pending: list[dict], client) -> None:
-    """Submit all pending samples as one batch job via the OpenAI /v1/batches API.
-
-    Each sample becomes one line in a JSONL request file.  After the job
-    completes the output file is downloaded, parsed, validated, and written
-    to OUTPUT_FILE incrementally — identical post-processing to the online path.
-    """
+async def _run_batch(pending: list[dict], client, model_name: str, output_file: Path) -> None:
+    """Submit all pending samples as one batch job via the OpenAI /v1/batches API."""
     import tempfile
 
-    # ── Build id → sample mapping (hash_id is the custom_id key) ──────────────
     id_to_sample: dict[str, dict] = {}
     batch_lines: list[str] = []
 
@@ -370,7 +355,7 @@ async def _run_batch(pending: list[dict], client) -> None:
             "method": "POST",
             "url": "/v1/chat/completions",
             "body": {
-                "model": MODEL_NAME,
+                "model": model_name,
                 "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user",   "content": json.dumps(memories, ensure_ascii=False)},
@@ -380,25 +365,23 @@ async def _run_batch(pending: list[dict], client) -> None:
         }
         batch_lines.append(json.dumps(request_line, ensure_ascii=False))
 
-    # ── Write requests to a temp file and upload ───────────────────────────────
     with tempfile.NamedTemporaryFile(mode="w", suffix=".jsonl", delete=False, encoding="utf-8") as tmp:
         tmp.write("\n".join(batch_lines))
         tmp_path = Path(tmp.name)
 
     try:
-        print(f"Uploading {len(pending)} requests…")
+        print(f"  Uploading {len(pending)} requests…")
         with open(tmp_path, "rb") as f:
             uploaded = await client.files.create(file=f, purpose="batch")
 
-        print(f"Submitting batch job (input_file_id={uploaded.id})…")
+        print(f"  Submitting batch job (input_file_id={uploaded.id})…")
         batch = await client.batches.create(
             input_file_id=uploaded.id,
             endpoint="/v1/chat/completions",
             completion_window="24h",
         )
-        print(f"Batch job created: {batch.id}")
+        print(f"  Batch job created: {batch.id}")
 
-        # ── Poll until terminal status ─────────────────────────────────────────
         poll_interval = BATCH_POLL_INTERVAL
         terminal = {"completed", "failed", "expired", "cancelled"}
         while batch.status not in terminal:
@@ -414,12 +397,10 @@ async def _run_batch(pending: list[dict], client) -> None:
         if batch.status != "completed":
             raise RuntimeError(f"Batch job ended with status '{batch.status}' (id={batch.id})")
 
-        # ── Download results ───────────────────────────────────────────────────
-        print(f"Batch complete. Downloading results (output_file_id={batch.output_file_id})…")
+        print(f"  Batch complete. Downloading results (output_file_id={batch.output_file_id})…")
         result_bytes = await client.files.content(batch.output_file_id)
         result_lines = result_bytes.text.splitlines()
 
-        # Clean up uploaded input file (best-effort)
         try:
             await client.files.delete(uploaded.id)
         except Exception:
@@ -428,9 +409,8 @@ async def _run_batch(pending: list[dict], client) -> None:
     finally:
         tmp_path.unlink(missing_ok=True)
 
-    # ── Parse and write results ────────────────────────────────────────────────
     processed = 0
-    with open(OUTPUT_FILE, "a") as out_file:
+    with open(output_file, "a") as out_file:
         for line in result_lines:
             if not line.strip():
                 continue
@@ -467,13 +447,56 @@ async def _run_batch(pending: list[dict], client) -> None:
             out_file.write(json.dumps(output, ensure_ascii=False) + "\n")
             out_file.flush()
             processed += 1
-            print(f"[{processed}/{len(pending)}] {clean_sample['query'][:70]}…")
+            print(f"  [{processed}/{len(pending)}] {clean_sample['query'][:70]}…")
 
-    print(f"Batch: processed {processed}/{len(pending)} results.")
+    print(f"  Batch: processed {processed}/{len(pending)} results.")
+
+
+async def _run_model(
+    model_name: str,
+    location: str,
+    samples: list[dict],
+) -> None:
+    """Process all samples for a single model."""
+    output_file = _output_file(model_name)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    total = len(samples)
+    done_queries = _load_checkpoint(output_file)
+    pending = [s for s in samples if s["query"] not in done_queries]
+    print(f"  Already done: {len(done_queries)} | Remaining: {len(pending)}")
+
+    if not pending:
+        print("  All samples already processed. Writing partitions…")
+        _write_partitions(output_file)
+        return
+
+    async with get_vertex_ai_client(location) as client:
+        if BATCH_MODE:
+            print("  Running in batch mode (OpenAI /v1/batches API)…")
+            await _run_batch(pending, client, model_name, output_file)
+        else:
+            semaphore = asyncio.Semaphore(CONCURRENCY)
+            lock = asyncio.Lock()
+            counter = [len(done_queries)]
+
+            print(f"  Running in concurrent mode (max {CONCURRENCY})…")
+
+            with open(output_file, "a") as out_file:
+                tasks = [
+                    _process_sample(
+                        sample, client, model_name, semaphore, out_file, lock, counter, total
+                    )
+                    for sample in pending
+                ]
+                await asyncio.gather(*tasks)
+
+    print(f"  Saved to {output_file}")
+    print("  Writing partition files…")
+    _write_partitions(output_file)
 
 
 async def main() -> None:
-    # Load input
     samples: list[dict] = []
     with open(INPUT_FILE) as f:
         for line in f:
@@ -481,43 +504,15 @@ async def main() -> None:
             if line:
                 samples.append(json.loads(line))
 
-    total = len(samples)
-    print(f"Loaded {total} samples from {INPUT_FILE}")
+    print(f"Loaded {len(samples)} samples from {INPUT_FILE}")
 
-    # Resume support
-    done_queries = _load_checkpoint()
-    pending = [s for s in samples if s["query"] not in done_queries]
-    print(f"Already done: {len(done_queries)} | Remaining: {len(pending)}")
+    for model_name, location in MODELS:
+        print(f"\n{'─' * 60}")
+        print(f"Model: {model_name}  (location: {location})")
+        print(f"{'─' * 60}")
+        await _run_model(model_name, location, samples)
 
-    if not pending:
-        print("All samples already processed. Writing partitions from existing output…")
-        _write_partitions()
-        return
-
-    if BATCH_MODE:
-        print("Running in batch mode (OpenAI /v1/batches API)…")
-        async with get_vertex_ai_client(MODEL_LOCATION) as client:
-            await _run_batch(pending, client)
-    else:
-        semaphore = asyncio.Semaphore(CONCURRENCY)
-        lock = asyncio.Lock()
-        counter = [len(done_queries)]   # mutable int shared across coroutines
-
-        print(f"Running in concurrent mode (max {CONCURRENCY})…")
-
-        async with get_vertex_ai_client(MODEL_LOCATION) as client:
-            with open(OUTPUT_FILE, "a") as out_file:
-                tasks = [
-                    _process_sample(
-                        sample, client, semaphore, out_file, lock, counter, total
-                    )
-                    for sample in pending
-                ]
-                await asyncio.gather(*tasks)
-
-    print(f"\nDone! Saved to {OUTPUT_FILE}")
-    print("Writing partition files…")
-    _write_partitions()
+    print("\nAll models complete.")
 
 
 if __name__ == "__main__":

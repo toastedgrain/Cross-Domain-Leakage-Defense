@@ -6,13 +6,15 @@ with all other sample fields (query, memory_domain, query_domain, failure_type, 
 preserved exactly as-is.
 
 Output is written incrementally so the script is safe to interrupt and resume.
+Each model in MODELS is processed sequentially and saved to its own subdirectory.
 
 ─── HOW TO EDIT ───────────────────────────────────────────────────────────────
-  • Change the model / location / temperature  →  MODEL block below
-  • Change input/output paths                  →  RUN CONFIG below
-  • Change the dataset you want to partition   →  RUN CONFIG below
-  • Change concurrency or retry behaviour      →  RUN_CONFIG below
-  • Change what the LLM is told to do          →  SYSTEM_PROMPT below
+  • Add / remove models                         →  MODELS list below
+  • Change temperature                          →  MODEL block below
+  • Change input/output paths                   →  RUN CONFIG below
+  • Change the dataset you want to partition    →  RUN CONFIG below
+  • Change concurrency or retry behaviour       →  RUN_CONFIG below
+  • Change what the LLM is told to do           →  SYSTEM_PROMPT below
 ───────────────────────────────────────────────────────────────────────────────
 """
 
@@ -29,8 +31,10 @@ os.environ.setdefault(
 )
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
-MODEL_NAME     = "google/gemini-3-pro-preview"
-MODEL_LOCATION = "global"   # VertexAI region where the model is deployed
+# Each entry: (model_name, location)
+MODELS = [
+    ("google/gemini-3-pro-preview", "global"),
+]
 TEMPERATURE    = 0
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -38,8 +42,9 @@ TEMPERATURE    = 0
 CONCURRENCY  = 7     # max simultaneous API requests
 MAX_RETRIES  = 5     # retry attempts per sample on parse / API failure
 _PROJECT_ROOT = Path(__file__).parent.parent.parent
-INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/full_benchmark.jsonl"
-OUTPUT_FILE  = _PROJECT_ROOT / "benchmark_samples/partitioned/gemini3_pro/full_benchmark.jsonl"
+INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/persistbench/full_benchmark.jsonl"
+OUTPUT_DIR   = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned"
+# Output per model: OUTPUT_DIR / <sanitized_model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── PROMPT ────────────────────────────────────────────────────────────────────
@@ -102,12 +107,20 @@ PARTITION_MAP = {
 }
 
 
-def _write_partitions() -> None:
-    """Read the completed OUTPUT_FILE and split it into 3 files by failure_type."""
-    out_dir = OUTPUT_FILE.parent
+def _sanitize_model_name(model_name: str) -> str:
+    return model_name.replace("/", "_")
+
+
+def _output_file(model_name: str) -> Path:
+    return OUTPUT_DIR / _sanitize_model_name(model_name) / "full_benchmark.jsonl"
+
+
+def _write_partitions(output_file: Path) -> None:
+    """Read the completed output file and split it into files by failure_type."""
+    out_dir = output_file.parent
     partitions: dict[str, list[str]] = {key: [] for key in PARTITION_MAP}
 
-    with open(OUTPUT_FILE) as f:
+    with open(output_file) as f:
         for line in f:
             line = line.strip()
             if not line:
@@ -124,14 +137,14 @@ def _write_partitions() -> None:
             f.write("\n".join(lines))
             if lines:
                 f.write("\n")
-        print(f"Wrote {len(lines):>3} samples [{failure_type}] → {out_path}")
+        print(f"  Wrote {len(lines):>3} samples [{failure_type}] → {out_path}")
 
 
-def _load_checkpoint() -> set[str]:
+def _load_checkpoint(output_file: Path) -> set[str]:
     """Return the set of queries already written to the output file."""
     done: set[str] = set()
-    if OUTPUT_FILE.exists():
-        with open(OUTPUT_FILE) as f:
+    if output_file.exists():
+        with open(output_file) as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -145,11 +158,7 @@ def _load_checkpoint() -> set[str]:
 def _validate_partition(
     memories: list[str], raw: dict
 ) -> dict[str, list[str]]:
-    """Ensure every input memory appears exactly once in the result.
-
-    Accepts whatever the model returned for each category, then appends any
-    memories the model missed to 'personal' as a safe fallback.
-    """
+    """Ensure every input memory appears exactly once in the result."""
     result: dict[str, list[str]] = {cat: [] for cat in CATEGORIES}
     placed: set[str] = set()
 
@@ -159,7 +168,6 @@ def _validate_partition(
                 result[cat].append(mem)
                 placed.add(mem)
 
-    # Fallback: anything the model missed goes to 'personal'
     for mem in memories:
         if mem not in placed:
             result["personal"].append(mem)
@@ -169,17 +177,18 @@ def _validate_partition(
 
 async def _classify(
     client,
+    model_name: str,
     memories: list[str],
     semaphore: asyncio.Semaphore,
 ) -> dict[str, list[str]]:
-    """Call the LLM and return a validated 9-category partition."""
+    """Call the LLM and return a validated 11-category partition."""
     user_message = json.dumps(memories, ensure_ascii=False)
 
     async with semaphore:
         for attempt in range(MAX_RETRIES):
             try:
                 response = await client.chat.completions.create(
-                    model=MODEL_NAME,
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user",   "content": user_message},
@@ -198,7 +207,6 @@ async def _classify(
                     return fallback
                 await asyncio.sleep(2**attempt)
 
-    # unreachable, but satisfies type checker
     fallback = {cat: [] for cat in CATEGORIES}
     fallback["personal"] = list(memories)
     return fallback
@@ -207,6 +215,7 @@ async def _classify(
 async def _process_sample(
     sample: dict,
     client,
+    model_name: str,
     semaphore: asyncio.Semaphore,
     out_file,
     lock: asyncio.Lock,
@@ -214,30 +223,61 @@ async def _process_sample(
     total: int,
 ) -> None:
     memories: list[str] = sample.get("memories", [])
-
-    # Compute hash from the original flat memories BEFORE partitioning.
-    # This stable hash matches what the benchmark runner computes for the same
-    # sample from the unpartitioned full_benchmark.jsonl, so all models share
-    # one canonical hash_id regardless of how their memories are categorised.
     hash_id = sample.get("hash_id") or generate_hash_id(memories, sample["query"])
 
     if memories:
-        partition = await _classify(client, memories, semaphore)
+        partition = await _classify(client, model_name, memories, semaphore)
     else:
         partition = {cat: [] for cat in CATEGORIES}
 
-    # Preserve every original field; replace 'memories' with partition and pin hash_id.
     result = {**sample, "hash_id": hash_id, "memories": partition}
 
     async with lock:
         out_file.write(json.dumps(result, ensure_ascii=False) + "\n")
         out_file.flush()
         counter[0] += 1
-        print(f"[{counter[0]}/{total}] {sample['query'][:70]}…")
+        print(f"  [{counter[0]}/{total}] {sample['query'][:70]}…")
+
+
+async def _run_model(
+    model_name: str,
+    location: str,
+    samples: list[dict],
+) -> None:
+    """Process all samples for a single model."""
+    output_file = _output_file(model_name)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    total = len(samples)
+    done_queries = _load_checkpoint(output_file)
+    pending = [s for s in samples if s["query"] not in done_queries]
+    print(f"  Already done: {len(done_queries)} | Remaining: {len(pending)}")
+
+    if not pending:
+        print("  All samples already processed. Writing partitions…")
+        _write_partitions(output_file)
+        return
+
+    semaphore = asyncio.Semaphore(CONCURRENCY)
+    lock = asyncio.Lock()
+    counter = [len(done_queries)]
+
+    async with get_vertex_ai_client(location) as client:
+        with open(output_file, "a") as out_file:
+            tasks = [
+                _process_sample(
+                    sample, client, model_name, semaphore, out_file, lock, counter, total
+                )
+                for sample in pending
+            ]
+            await asyncio.gather(*tasks)
+
+    print(f"  Saved to {output_file}")
+    print("  Writing partition files…")
+    _write_partitions(output_file)
 
 
 async def main() -> None:
-    # Load input
     samples: list[dict] = []
     with open(INPUT_FILE) as f:
         for line in f:
@@ -245,36 +285,15 @@ async def main() -> None:
             if line:
                 samples.append(json.loads(line))
 
-    total = len(samples)
-    print(f"Loaded {total} samples from {INPUT_FILE}")
+    print(f"Loaded {len(samples)} samples from {INPUT_FILE}")
 
-    # Resume support
-    done_queries = _load_checkpoint()
-    pending = [s for s in samples if s["query"] not in done_queries]
-    print(f"Already done: {len(done_queries)} | Remaining: {len(pending)}")
+    for model_name, location in MODELS:
+        print(f"\n{'─' * 60}")
+        print(f"Model: {model_name}  (location: {location})")
+        print(f"{'─' * 60}")
+        await _run_model(model_name, location, samples)
 
-    if not pending:
-        print("All samples already processed. Writing partitions from existing output…")
-        _write_partitions()
-        return
-
-    semaphore = asyncio.Semaphore(CONCURRENCY)
-    lock = asyncio.Lock()
-    counter = [len(done_queries)]   # mutable int shared across coroutines
-
-    async with get_vertex_ai_client(MODEL_LOCATION) as client:
-        with open(OUTPUT_FILE, "a") as out_file:
-            tasks = [
-                _process_sample(
-                    sample, client, semaphore, out_file, lock, counter, total
-                )
-                for sample in pending
-            ]
-            await asyncio.gather(*tasks)
-
-    print(f"\nDone! Saved to {OUTPUT_FILE}")
-    print("Writing partition files…")
-    _write_partitions()
+    print("\nAll models complete.")
 
 
 if __name__ == "__main__":
