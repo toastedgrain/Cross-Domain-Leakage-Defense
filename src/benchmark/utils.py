@@ -618,7 +618,13 @@ async def openai_compat_generate(
     if choice.finish_reason and choice.finish_reason not in SUCCESS_FINISH_REASONS:
         raise RuntimeError(f"Unsuccessful finish_reason: {choice.finish_reason}")
 
+    raw = response.model_dump(mode="json")
+    content = choice.message.content or ""
+    cleaned, reasoning = strip_reasoning_tags(content)
+    if reasoning is not None:
+        raw["extracted_reasoning_content"] = reasoning
+
     return {
-        "response": choice.message.content or "",
-        "raw_api_response": response.model_dump(mode="json"),
+        "response": cleaned,
+        "raw_api_response": raw,
     }

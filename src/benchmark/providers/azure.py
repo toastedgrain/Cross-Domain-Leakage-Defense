@@ -15,7 +15,7 @@ from openai import AsyncOpenAI
 from benchmark.config import ModelEntry
 from benchmark.exceptions import FatalBenchmarkError
 from benchmark.types import GenerateResult
-from benchmark.utils import api_retry, openai_compat_generate, strip_reasoning_tags
+from benchmark.utils import api_retry, openai_compat_generate
 
 
 @api_retry()
@@ -39,11 +39,4 @@ async def azure_generate(
         raise FatalBenchmarkError(f"{api_key_env} environment variable not set")
 
     async with AsyncOpenAI(base_url=model.base_url, api_key=api_key) as client:
-        result = await openai_compat_generate(client, model, system_prompt, user_message)
-
-    cleaned, reasoning = strip_reasoning_tags(result["response"])
-    if reasoning is not None:
-        result["raw_api_response"]["extracted_reasoning_content"] = reasoning
-        result["response"] = cleaned
-
-    return result
+        return await openai_compat_generate(client, model, system_prompt, user_message)
