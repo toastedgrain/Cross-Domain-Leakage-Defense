@@ -1,0 +1,66 @@
+{
+  "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
+  "output": "outputs/persistbench/all_configs/partitioned_defence/output_all_models_partitioned_permissive.json",
+  "prompt_template": "prompts/defensive/permissive.txt",
+  "dataset": "persistbench",
+  "method": "partitioned",
+  "judge_provider": "vertexai",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 75,
+  "models": [
+    {
+      "name": "DeepSeek-V3.2",
+      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": "benchmark_samples/persistbench/partitioned/DeepSeek-V3.2/full_benchmark.jsonl"
+    },
+    {
+      "name": "gpt-oss-120b",
+      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": "benchmark_samples/persistbench/partitioned/gpt-oss-120b/full_benchmark.jsonl"
+    },
+    {
+      "name": "xai/grok-4.1-fast-non-reasoning",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/partitioned/xai_grok-4.1-fast-non-reasoning/full_benchmark.jsonl"
+    },
+    {
+      "name": "zai-org/glm-4.7-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/partitioned/zai-org_glm-4.7-maas/full_benchmark.jsonl"
+    },
+    {
+      "name": "meta/llama-3.3-70b-instruct-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "us-central1",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/partitioned/llama3p3_70b/full_benchmark.jsonl"
+    },
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/partitioned/qwen3_235b/full_benchmark.jsonl"
+    }
+  ]
+}
