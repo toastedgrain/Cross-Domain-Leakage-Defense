@@ -1,0 +1,66 @@
+{
+  "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
+  "output": "outputs/persistbench/all_configs/tree/output_all_models_tree_informed.json",
+  "dataset": "persistbench",
+  "method": "tree",
+  "prompt_template": "prompts/evaluation_tree_informed.txt",
+  "judge_provider": "vertexai",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 75,
+  "models": [
+    {
+      "name": "DeepSeek-V3.2",
+      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": "benchmark_samples/persistbench/tree/DeepSeek-V3.2/full_benchmark.jsonl"
+    },
+    {
+      "name": "gpt-oss-120b",
+      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": "benchmark_samples/persistbench/tree/gpt-oss-120b/full_benchmark.jsonl"
+    },
+    {
+      "name": "xai/grok-4.1-fast-non-reasoning",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/xai_grok-4.1-fast-non-reasoning/full_benchmark.jsonl"
+    },
+    {
+      "name": "zai-org/glm-4.7-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/zai-org_glm-4.7-maas/full_benchmark.jsonl"
+    },
+    {
+      "name": "meta/llama-3.3-70b-instruct-maas",
+      "provider": "vertexai",
+      "mode": "batch",
+      "api_params": {
+        "location": "us-central1",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/llama3p3_70b/cross_domain_and_beneficial_tree_llama3p3.jsonl"
+    },
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "batch",
+      "api_params": {
+        "location": "us-south1",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/qwen3_235b/cross_domain_and_beneficial_tree_qwen3.jsonl"
+    }
+  ]
+}
