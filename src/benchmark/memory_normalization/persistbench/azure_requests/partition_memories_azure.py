@@ -29,7 +29,7 @@ from pathlib import Path
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 MODELS = [
-    "DeepSeek-V3.2", "FW-GPT-OSS-120B"                 # Azure deployment names
+    "grok-4-1-fast-non-reasoning"                 # Azure deployment names
 ]
 AZURE_ENDPOINT    = "https://algoverse-hakeem.services.ai.azure.com/openai/v1/"
 AZURE_API_KEY_ENV = "AZURE_OPENAI_API_KEY"
@@ -41,7 +41,7 @@ CONCURRENCY   = 5    # max simultaneous API requests
 MAX_RETRIES   = 5    # retry attempts per sample on parse / API failure
 _PROJECT_ROOT = Path(__file__).resolve().parents[5]  # repo root
 INPUT_FILE    = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
-OUTPUT_DIR    = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned"
+OUTPUT_DIR    = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned/tmp"
 # Output per model: OUTPUT_DIR / <model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 

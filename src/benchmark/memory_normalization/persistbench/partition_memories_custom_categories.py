@@ -34,9 +34,9 @@ os.environ.setdefault(
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 # Each entry: (model_name, location)
 MODELS = [
-    ("meta/llama-3.3-70b-instruct-maas", "us-central1"),
+    ("xai/grok-4.1-fast-non-reasoning", "global"), ("zai-org/glm-4.7-maas", "global"), ("claude-sonnet-4-6@default", "global")
 ]
-TEMPERATURE    = 0
+TEMPERATURE  = 0.7
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
@@ -44,7 +44,7 @@ CONCURRENCY  = 7     # max simultaneous API requests
 BATCH_MODE   = False # True = submit all requests via /v1/batches (cheaper, async, ~50% cost)
 BATCH_POLL_INTERVAL = 15  # seconds between batch status polls (grows up to 60s)
 MAX_RETRIES  = 5     # retry attempts per sample on parse / API failure
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
 INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
 OUTPUT_DIR   = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned_custom_categories"
 # Output per model: OUTPUT_DIR / <sanitized_model_name> / full_benchmark.jsonl
@@ -151,7 +151,7 @@ Omit any custom-category key if it has no memories.
 
 import re    # noqa: E402
 import sys  # noqa: E402
-sys.path.insert(0, str(Path(__file__).parent.parent))  # add src/ so 'benchmark' is importable
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))  # add src/ so 'benchmark' is importable
 
 from benchmark.utils import extract_json_from_response, generate_hash_id, get_vertex_ai_client  # noqa: E402
 

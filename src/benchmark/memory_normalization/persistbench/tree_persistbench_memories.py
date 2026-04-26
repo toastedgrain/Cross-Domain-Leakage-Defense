@@ -50,14 +50,14 @@ os.environ.setdefault(
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 # Each entry: (model_name, location)
 MODELS = [
-    ("qwen/qwen3-235b-a22b-instruct-2507-maas", "global"),
+    ("xai/grok-4.1-fast-non-reasoning", "global"), ("zai-org/glm-4.7-maas", "global")
 ]
 TEMPERATURE    = 0.7
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
 CONCURRENCY     = 10    # max simultaneous API requests
-MAX_RETRIES     = 5     # retry attempts per API call on parse / API failure
+MAX_RETRIES     = 100   # retry attempts per API call on parse / API failure
 MAX_SUBCATS     = 7     # maximum subcategories per top-level category
 MAX_SAMPLES     = None  # max number of samples to process (None = all)
 _PROJECT_ROOT   = Path(__file__).resolve().parent.parent.parent.parent.parent  # repo root
@@ -176,6 +176,10 @@ def _output_file(model_name: str) -> Path:
     return OUTPUT_DIR / _sanitize_model_name(model_name) / "full_benchmark.jsonl"
 
 
+def _skeleton_file(model_name: str) -> Path:
+    return OUTPUT_DIR / _sanitize_model_name(model_name) / "skeletons.jsonl"
+
+
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build a two-level memory tree for PersistBench samples.",
@@ -204,6 +208,24 @@ def _load_checkpoint(output_file: Path) -> set[str]:
                 except (json.JSONDecodeError, KeyError):
                     pass
     return done
+
+
+def _load_skeleton_checkpoint(model_name: str) -> dict[str, dict[str, list[str]]]:
+    """Return skeletons already computed in a previous run."""
+    skeletons: dict[str, dict[str, list[str]]] = {}
+    path = _skeleton_file(model_name)
+    if path.exists():
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                    skeletons[row["query"]] = row["skeleton"]
+                except (json.JSONDecodeError, KeyError):
+                    pass
+    return skeletons
 
 
 def _validate_skeleton(raw: dict) -> dict[str, list[str]]:
@@ -340,77 +362,83 @@ async def _fill_tree(
     return tree
 
 
-async def _process_sample(
-    raw_row: dict,
-    client,
+async def _run_skeletons(
     model_name: str,
-    semaphore: asyncio.Semaphore,
-    out_file,
-    lock: asyncio.Lock,
+    location: str,
+    rows: list[dict],
+) -> dict[str, dict[str, list[str]]]:
+    """Phase 1: Generate skeletons for all rows under one model."""
+    skeletons = _load_skeleton_checkpoint(model_name)
+    pending = [r for r in rows if r["query"] not in skeletons]
+    print(f"  Skeleton checkpoint: {len(skeletons)} done | {len(pending)} remaining")
+
+    if pending:
+        semaphore = asyncio.Semaphore(CONCURRENCY)
+        lock = asyncio.Lock()
+        total = len(rows)
+        counter = [len(skeletons)]
+        skel_path = _skeleton_file(model_name)
+
+        async def _one(row: dict, skel_file) -> None:
+            memories = row.get("memories", [])
+            skeleton = (
+                await _generate_skeleton(client, model_name, memories, semaphore)
+                if memories else {cat: [cat] for cat in CATEGORIES}
+            )
+            async with lock:
+                skeletons[row["query"]] = skeleton
+                skel_file.write(json.dumps({"query": row["query"], "skeleton": skeleton}, ensure_ascii=False) + "\n")
+                skel_file.flush()
+                counter[0] += 1
+                print(f"  [{counter[0]}/{total}] skeleton: {row['query'][:70]}...")
+
+        async with get_vertex_ai_client(location) as client:
+            with open(skel_path, "a", encoding="utf-8") as skel_file:
+                await asyncio.gather(*[_one(row, skel_file) for row in pending])
+
+    return skeletons
+
+
+async def _run_fills(
+    model_name: str,
+    location: str,
+    rows: list[dict],
+    skeletons: dict[str, dict[str, list[str]]],
+    output_file: Path,
     counter: list[int],
     total: int,
 ) -> None:
-    """Build a two-level memory tree for a single sample and write it out."""
-    memories: list[str] = raw_row.get("memories", [])
-    hash_id = raw_row.get("hash_id") or generate_hash_id(memories, raw_row["query"])
-
-    if memories:
-        skeleton = await _generate_skeleton(client, model_name, memories, semaphore)
-        tree = await _fill_tree(client, model_name, memories, skeleton, semaphore)
-    else:
-        skeleton = {cat: [cat] for cat in CATEGORIES}
-        tree = {cat: {cat: []} for cat in CATEGORIES}
-
-    out_row = {
-        "query": raw_row["query"],
-        "memories": tree,
-        "memory_domain": raw_row.get("memory_domain", ""),
-        "query_domain": raw_row.get("query_domain", ""),
-        "failure_type": raw_row.get("failure_type", ""),
-        "hash_id": hash_id,
-    }
-
-    async with lock:
-        out_file.write(json.dumps(out_row, ensure_ascii=False) + "\n")
-        out_file.flush()
-        counter[0] += 1
-        print(f"  [{counter[0]}/{total}] {raw_row['query'][:70]}...")
-
-
-async def _run_model(
-    model_name: str,
-    location: str,
-    raw_rows: list[dict],
-) -> None:
-    """Process all samples for a single model."""
-    output_file = _output_file(model_name)
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-
-    done_queries = _load_checkpoint(output_file)
-    pending = [r for r in raw_rows if r["query"] not in done_queries]
-    print(f"  Checkpoint: {len(done_queries)} rows written | Remaining: {len(pending)}")
-
-    if not pending:
-        print("  All samples already processed.")
-        return
-
-    total = len(raw_rows)
+    """Phase 2: Fill trees for all rows under one model, writing results immediately."""
     semaphore = asyncio.Semaphore(CONCURRENCY)
     lock = asyncio.Lock()
-    counter = [len(done_queries)]
 
-    print(f"  Building memory trees for {len(pending)} sample(s) ...")
+    async def _one(row: dict, out_file) -> None:
+        memories: list[str] = row.get("memories", [])
+        skeleton = skeletons[row["query"]]
+        hash_id = row.get("hash_id") or generate_hash_id(memories, row["query"])
+
+        tree = (
+            await _fill_tree(client, model_name, memories, skeleton, semaphore)
+            if memories else {cat: {cat: []} for cat in CATEGORIES}
+        )
+
+        out_row = {
+            "query": row["query"],
+            "memories": tree,
+            "memory_domain": row.get("memory_domain", ""),
+            "query_domain": row.get("query_domain", ""),
+            "failure_type": row.get("failure_type", ""),
+            "hash_id": hash_id,
+        }
+        async with lock:
+            out_file.write(json.dumps(out_row, ensure_ascii=False) + "\n")
+            out_file.flush()
+            counter[0] += 1
+            print(f"  [{counter[0]}/{total}] {row['query'][:70]}...")
+
     async with get_vertex_ai_client(location) as client:
         with open(output_file, "a", encoding="utf-8") as out_file:
-            tasks = [
-                _process_sample(
-                    row, client, model_name, semaphore, out_file, lock, counter, total
-                )
-                for row in pending
-            ]
-            await asyncio.gather(*tasks)
-
-    print(f"  {counter[0]} rows saved to {output_file}")
+            await asyncio.gather(*[_one(row, out_file) for row in rows])
 
 
 async def main() -> None:
@@ -430,11 +458,30 @@ async def main() -> None:
         raw_rows = raw_rows[:MAX_SAMPLES]
         print(f"Limit: capped to {MAX_SAMPLES} sample(s)")
 
+    # Resolve pending rows per model up front
+    model_work: list[tuple[str, str, list[dict]]] = []
     for model_name, location in MODELS:
-        print(f"\n{'─' * 60}")
-        print(f"Model: {model_name}  (location: {location})")
-        print(f"{'─' * 60}")
-        await _run_model(model_name, location, raw_rows)
+        output_file = _output_file(model_name)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        done = _load_checkpoint(output_file)
+        pending = [r for r in raw_rows if r["query"] not in done]
+        print(f"  {model_name}: {len(done)} done, {len(pending)} pending")
+        model_work.append((model_name, location, pending))
+
+    for model_name, location, pending in model_work:
+        print(f"\n{'─' * 60}\nModel: {model_name}\n{'─' * 60}")
+        if not pending:
+            print("  All samples already processed.")
+            continue
+
+        print(f"  Phase 1 — Skeletons ({len(pending)} row(s)) ...")
+        skeletons = await _run_skeletons(model_name, location, pending)
+
+        output_file = _output_file(model_name)
+        counter = [len(raw_rows) - len(pending)]
+        print(f"  Phase 2 — Fills ({len(pending)} row(s)) ...")
+        await _run_fills(model_name, location, pending, skeletons, output_file, counter, len(raw_rows))
+        print(f"  {counter[0]} rows saved to {output_file}")
 
     print("\nAll models complete.")
 

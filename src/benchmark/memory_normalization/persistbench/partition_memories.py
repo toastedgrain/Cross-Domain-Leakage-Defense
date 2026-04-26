@@ -32,8 +32,9 @@ os.environ.setdefault(
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 # Each entry: (model_name, location)
+
 MODELS = [
-    ("google/gemini-3-pro-preview", "global"),
+    ("zai-org/glm-4.7-maas", "global"), ("claude-sonnet-4-6@default", "global")
 ]
 TEMPERATURE    = 0
 # ──────────────────────────────────────────────────────────────────────────────
@@ -41,8 +42,8 @@ TEMPERATURE    = 0
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
 CONCURRENCY  = 7     # max simultaneous API requests
 MAX_RETRIES  = 5     # retry attempts per sample on parse / API failure
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/persistbench/full_benchmark.jsonl"
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
 OUTPUT_DIR   = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned"
 # Output per model: OUTPUT_DIR / <sanitized_model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ Return ONLY a single-line JSON object with the following keys in this exact orde
 # ── Internals (no need to edit below) ─────────────────────────────────────────
 
 import sys  # noqa: E402
-sys.path.insert(0, str(Path(__file__).parent.parent))  # add src/ so 'benchmark' is importable
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))  # add src/ so 'benchmark' is importable
 
 from benchmark.utils import extract_json_from_response, generate_hash_id, get_vertex_ai_client  # noqa: E402
 

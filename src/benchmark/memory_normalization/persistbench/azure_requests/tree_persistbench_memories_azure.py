@@ -47,7 +47,7 @@ from pathlib import Path
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 MODELS = [
-    "DeepSeek-V3.2", "FW-GPT-OSS-120B",                  # Azure deployment names
+    "DeepSeek-V3.2", "gpt-oss-120b",                  # Azure deployment names
 ]
 AZURE_ENDPOINT    = "https://algoverse-hakeem.services.ai.azure.com/openai/v1/"
 AZURE_API_KEY_ENV = "AZURE_OPENAI_API_KEY"
