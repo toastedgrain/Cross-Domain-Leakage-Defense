@@ -1,0 +1,19 @@
+{
+  "models": [
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      }
+    }
+  ],
+  "dataset": "persistbench",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "judge_provider": "vertexai",
+  "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.25.jsonl",
+  "output": "outputs/persistbench/rag/persist_rag_tau0.25_gemini3_pro.json",
+  "concurrency": 25
+}

@@ -1,0 +1,24 @@
+{
+  "models": [
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "input": "benchmark_samples/persistbench/partitioned_custom_categories/llama3p3_70b/full_benchmark.jsonl",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      }
+    }
+  ],
+  "dataset": "persistbench",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "judge_provider": "vertexai",
+  "judge_api_params": {
+    "temperature": 0
+  },
+  "method": "partitioned",
+  "input": "benchmark_samples/persistbench/partitioned_custom_categories/llama3p3_70b/full_benchmark.jsonl",
+  "output": "outputs/persistbench/partitioned_custom_categories/persist_partitioned_custom_categories_gemini3_pro.json",
+  "concurrency": 25
+}
