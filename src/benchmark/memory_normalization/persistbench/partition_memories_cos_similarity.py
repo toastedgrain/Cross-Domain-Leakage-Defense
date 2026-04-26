@@ -29,9 +29,9 @@ MODEL_NAME = "BAAI/bge-large-en-v1.5"
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-INPUT_FILE  = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/cross_domain_and_beneficial.jsonl"
-OUTPUT_FILE = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned/cos_similarity/full_benchmark.jsonl"
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+INPUT_FILE  = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/sycophancy.jsonl"
+OUTPUT_FILE = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned/cos_similarity/sycophancy.jsonl"
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── CATEGORIES ────────────────────────────────────────────────────────────────
@@ -67,7 +67,7 @@ DOMAINS = [
 assert len(CATEGORIES) == len(DOMAINS) == 11
 # ──────────────────────────────────────────────────────────────────────────────
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(_PROJECT_ROOT / "src"))
 from benchmark.utils import generate_hash_id  # noqa: E402
 
 

@@ -25,6 +25,7 @@ from benchmark.utils import (
     JUDGE_RESPONSE_SCHEMA,
     extract_json_from_response,
 )
+from benchmark.providers.azure import azure_generate
 from benchmark.providers.openai import OpenAIBatchProvider, openai_generate
 from benchmark.providers.openai_compatible import openai_compatible_generate
 from benchmark.providers.openrouter import openrouter_generate_response
@@ -33,6 +34,7 @@ from benchmark.providers.vertexai import vertexai_generate
 __all__ = [
     "AnthropicBatchProvider",
     "anthropic_generate",
+    "azure_generate",
     "extract_json_from_response",
     "GeminiBatchProvider",
     "gemini_generate",

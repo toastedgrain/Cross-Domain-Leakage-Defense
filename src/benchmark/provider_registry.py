@@ -12,6 +12,7 @@ from benchmark.providers import (
     GeminiBatchProvider,
     OpenAIBatchProvider,
     anthropic_generate,
+    azure_generate,
     gemini_generate,
     openai_compatible_generate,
     openai_generate,
@@ -106,6 +107,13 @@ def get_batch_provider(provider_name: str) -> BatchGenerateFn:
 
 
 PROVIDERS: dict[str, ProviderConfig] = {
+    # Azure OpenAI Service provider (sequential only)
+    # Requires base_url (Azure endpoint), AZURE_OPENAI_API_KEY, and model name = deployment name
+    # Optionally set api_params.api_version (defaults to 2024-02-01)
+    "azure": {
+        "generate_fn": azure_generate,
+        "batch_provider_class": None,
+    },
     # default provider, simple to use and supports all of the benchmark models
     "openrouter": {
         "generate_fn": openrouter_generate_response,

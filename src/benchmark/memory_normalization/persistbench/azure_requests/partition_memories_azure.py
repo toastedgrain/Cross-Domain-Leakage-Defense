@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Partition the 'memories' field in full_benchmark.jsonl into 11 categories.
 
+Azure AI Foundry version — uses AsyncOpenAI with a Foundry endpoint instead of VertexAI.
+
 Each sample's flat list of memories is replaced with a dict of 11 category keys,
 with all other sample fields (query, memory_domain, query_domain, failure_type, …)
 preserved exactly as-is.
@@ -9,12 +11,12 @@ Output is written incrementally so the script is safe to interrupt and resume.
 Each model in MODELS is processed sequentially and saved to its own subdirectory.
 
 ─── HOW TO EDIT ───────────────────────────────────────────────────────────────
-  • Add / remove models                         →  MODELS list below
-  • Change temperature                          →  MODEL block below
-  • Change input/output paths                   →  RUN CONFIG below
-  • Change the dataset you want to partition    →  RUN CONFIG below
-  • Change concurrency or retry behaviour       →  RUN_CONFIG below
-  • Change what the LLM is told to do           →  SYSTEM_PROMPT below
+  • Add / remove models                    →  MODELS list below
+  • Change the Azure endpoint / key env    →  MODEL block below
+  • Change temperature                     →  MODEL block below
+  • Change input/output paths              →  RUN CONFIG below
+  • Change concurrency or retry behaviour  →  RUN CONFIG below
+  • Change what the LLM is told to do      →  SYSTEM_PROMPT below
 ───────────────────────────────────────────────────────────────────────────────
 """
 
@@ -22,30 +24,25 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 import os
-
-os.environ.setdefault(
-    "VERTEXAI_SERVICE_ACCOUNT_PATH",
-    str(Path.home() / "Downloads" / "VERTEXAI_SERVICE_ACCOUNT.json"),
-)
+from pathlib import Path
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
-# Each entry: (model_name, location)
-
 MODELS = [
-    ("zai-org/glm-4.7-maas", "global"), ("claude-sonnet-4-6@default", "global")
+    "grok-4-1-fast-non-reasoning"                 # Azure deployment names
 ]
-TEMPERATURE    = 0
+AZURE_ENDPOINT    = "https://algoverse-hakeem.services.ai.azure.com/openai/v1/"
+AZURE_API_KEY_ENV = "AZURE_OPENAI_API_KEY"
+TEMPERATURE       = 0
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── RUN CONFIG ────────────────────────────────────────────────────────────────
-CONCURRENCY  = 7     # max simultaneous API requests
-MAX_RETRIES  = 5     # retry attempts per sample on parse / API failure
-_PROJECT_ROOT = Path(__file__).resolve().parents[4]
-INPUT_FILE   = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
-OUTPUT_DIR   = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned"
-# Output per model: OUTPUT_DIR / <sanitized_model_name> / full_benchmark.jsonl
+CONCURRENCY   = 5    # max simultaneous API requests
+MAX_RETRIES   = 5    # retry attempts per sample on parse / API failure
+_PROJECT_ROOT = Path(__file__).resolve().parents[5]  # repo root
+INPUT_FILE    = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
+OUTPUT_DIR    = _PROJECT_ROOT / "benchmark_samples/persistbench/partitioned/tmp"
+# Output per model: OUTPUT_DIR / <model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
 
 # ── PROMPT ────────────────────────────────────────────────────────────────────
@@ -98,7 +95,9 @@ Return ONLY a single-line JSON object with the following keys in this exact orde
 import sys  # noqa: E402
 sys.path.insert(0, str(_PROJECT_ROOT / "src"))  # add src/ so 'benchmark' is importable
 
-from benchmark.utils import extract_json_from_response, generate_hash_id, get_vertex_ai_client  # noqa: E402
+from openai import AsyncOpenAI  # noqa: E402
+
+from benchmark.utils import extract_json_from_response, generate_hash_id  # noqa: E402
 
 
 PARTITION_MAP = {
@@ -108,12 +107,8 @@ PARTITION_MAP = {
 }
 
 
-def _sanitize_model_name(model_name: str) -> str:
-    return model_name.replace("/", "_")
-
-
 def _output_file(model_name: str) -> Path:
-    return OUTPUT_DIR / _sanitize_model_name(model_name) / "full_benchmark.jsonl"
+    return OUTPUT_DIR / model_name / "full_benchmark.jsonl"
 
 
 def _write_partitions(output_file: Path) -> None:
@@ -177,7 +172,7 @@ def _validate_partition(
 
 
 async def _classify(
-    client,
+    client: AsyncOpenAI,
     model_name: str,
     memories: list[str],
     semaphore: asyncio.Semaphore,
@@ -215,7 +210,7 @@ async def _classify(
 
 async def _process_sample(
     sample: dict,
-    client,
+    client: AsyncOpenAI,
     model_name: str,
     semaphore: asyncio.Semaphore,
     out_file,
@@ -242,8 +237,8 @@ async def _process_sample(
 
 async def _run_model(
     model_name: str,
-    location: str,
     samples: list[dict],
+    client: AsyncOpenAI,
 ) -> None:
     """Process all samples for a single model."""
     output_file = _output_file(model_name)
@@ -263,15 +258,14 @@ async def _run_model(
     lock = asyncio.Lock()
     counter = [len(done_queries)]
 
-    async with get_vertex_ai_client(location) as client:
-        with open(output_file, "a") as out_file:
-            tasks = [
-                _process_sample(
-                    sample, client, model_name, semaphore, out_file, lock, counter, total
-                )
-                for sample in pending
-            ]
-            await asyncio.gather(*tasks)
+    with open(output_file, "a") as out_file:
+        tasks = [
+            _process_sample(
+                sample, client, model_name, semaphore, out_file, lock, counter, total
+            )
+            for sample in pending
+        ]
+        await asyncio.gather(*tasks)
 
     print(f"  Saved to {output_file}")
     print("  Writing partition files…")
@@ -279,20 +273,24 @@ async def _run_model(
 
 
 async def main() -> None:
+    api_key = os.environ.get(AZURE_API_KEY_ENV)
+    if not api_key:
+        raise SystemExit(f"Error: {AZURE_API_KEY_ENV} environment variable not set")
+
     samples: list[dict] = []
     with open(INPUT_FILE) as f:
         for line in f:
             line = line.strip()
             if line:
                 samples.append(json.loads(line))
-
     print(f"Loaded {len(samples)} samples from {INPUT_FILE}")
 
-    for model_name, location in MODELS:
-        print(f"\n{'─' * 60}")
-        print(f"Model: {model_name}  (location: {location})")
-        print(f"{'─' * 60}")
-        await _run_model(model_name, location, samples)
+    async with AsyncOpenAI(base_url=AZURE_ENDPOINT, api_key=api_key) as client:
+        for model_name in MODELS:
+            print(f"\n{'─' * 60}")
+            print(f"Model: {model_name}")
+            print(f"{'─' * 60}")
+            await _run_model(model_name, samples, client)
 
     print("\nAll models complete.")
 

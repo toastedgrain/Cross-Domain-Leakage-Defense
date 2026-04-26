@@ -6,7 +6,6 @@ from benchmark.utils import (
     api_retry,
     get_vertex_ai_client,
     openai_compat_generate,
-    strip_reasoning_tags,
 )
 
 
@@ -32,13 +31,4 @@ async def vertexai_generate(
         )
 
     async with get_vertex_ai_client(location) as client:
-        result = await openai_compat_generate(
-            client, model, system_prompt, user_message
-        )
-
-    cleaned, reasoning = strip_reasoning_tags(result["response"])
-    if reasoning is not None:
-        result["raw_api_response"]["extracted_reasoning_content"] = reasoning
-        result["response"] = cleaned
-
-    return result
+        return await openai_compat_generate(client, model, system_prompt, user_message)
