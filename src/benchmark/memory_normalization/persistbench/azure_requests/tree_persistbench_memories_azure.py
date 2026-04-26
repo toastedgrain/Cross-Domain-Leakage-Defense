@@ -47,7 +47,7 @@ from pathlib import Path
 
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 MODELS = [
-    "gpt-4o",                  # Azure deployment names
+    "DeepSeek-V3.2", "FW-GPT-OSS-120B",                  # Azure deployment names
 ]
 AZURE_ENDPOINT    = "https://algoverse-hakeem.services.ai.azure.com/openai/v1/"
 AZURE_API_KEY_ENV = "AZURE_OPENAI_API_KEY"
@@ -60,7 +60,7 @@ MAX_RETRIES   = 5    # retry attempts per API call on parse / API failure
 MAX_SUBCATS   = 7    # maximum subcategories per top-level category
 MAX_SAMPLES   = None # max number of samples to process (None = all)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent.parent  # → repo root
-INPUT_FILE    = _PROJECT_ROOT / "benchmark_samples/persistbench/full_benchmark.jsonl"
+INPUT_FILE    = _PROJECT_ROOT / "benchmark_samples/persistbench/baseline/full_benchmark.jsonl"
 OUTPUT_DIR    = _PROJECT_ROOT / "benchmark_samples/persistbench/tree"
 # Output per model: OUTPUT_DIR / <model_name> / full_benchmark.jsonl
 # ──────────────────────────────────────────────────────────────────────────────
