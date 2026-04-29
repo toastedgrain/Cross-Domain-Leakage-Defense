@@ -50,7 +50,7 @@ os.environ.setdefault(
 # ── MODEL ─────────────────────────────────────────────────────────────────────
 # Each entry: (model_name, location)
 MODELS = [
-    ("xai/grok-4.1-fast-non-reasoning", "global"), ("zai-org/glm-4.7-maas", "global")
+    ("zai-org/glm-4.7-maas", "global")
 ]
 TEMPERATURE    = 0.7
 # ──────────────────────────────────────────────────────────────────────────────
