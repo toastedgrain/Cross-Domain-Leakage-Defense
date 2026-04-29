@@ -1,0 +1,20 @@
+{
+  "models": [
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      }
+    }
+  ],
+  "dataset": "persistbench",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "judge_provider": "vertexai",
+  "prompt_template": "prompts/defensive/rubric_informed.txt",
+  "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
+  "output": "outputs/persistbench/defence/persist_rubric_informed_gemini3_pro.json",
+  "concurrency": 25
+}

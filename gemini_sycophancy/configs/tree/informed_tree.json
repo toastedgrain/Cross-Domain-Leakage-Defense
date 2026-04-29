@@ -1,0 +1,22 @@
+{
+  "input": "gemini_sycophancy/data/tree_full_500/full_benchmark_tree.jsonl",
+  "output": "outputs/persistbench/tree/persist_informed_tree_gemini3_pro.json",
+  "dataset": "persistbench",
+  "method": "tree",
+  "prompt_template": "prompts/evaluation_tree_informed.txt",
+  "judge_provider": "vertexai",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 25,
+  "models": [
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "gemini_sycophancy/data/tree_full_500/full_benchmark_tree.jsonl"
+    }
+  ]
+}
