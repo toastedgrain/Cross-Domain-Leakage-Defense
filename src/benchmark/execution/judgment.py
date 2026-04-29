@@ -575,8 +575,12 @@ async def evaluate_with_judge(
             )
     else:
         judge_system_prompt = get_judge_system_prompt(failure_type)
+        # RAG runs filter the generator's view of memories. The judge must see
+        # the complete pool to correctly score leakage/beneficial/sycophancy,
+        # so we prefer full_memories when present and fall back to memories.
+        judge_memories = entry.get("full_memories") or entry["memories"]
         judge_user_msg = build_judge_prompt(
-            memories=entry["memories"],
+            memories=judge_memories,
             query=entry["query"],
             memory_response=memory_response,
         )

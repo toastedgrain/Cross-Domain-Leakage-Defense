@@ -244,7 +244,11 @@ async def main() -> None:
                 kept_indices = [i for i in kept_indices if similarities[i] >= threshold]
                 filtered = [memories[idx] for idx in kept_indices]
 
-                out_row = {**row, "memories": filtered}
+                # Generator sees the filtered subset via "memories"; judge later
+                # uses "full_memories" so it can score leakage/beneficial-usage
+                # against the complete pool (judgment.py prefers full_memories
+                # when present).
+                out_row = {**row, "memories": filtered, "full_memories": memories}
                 out.write(json.dumps(out_row, ensure_ascii=False) + "\n")
                 counter += 1
 

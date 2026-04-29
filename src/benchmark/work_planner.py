@@ -136,6 +136,8 @@ def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> l
             "original_index": i,
             "failure_type": failure_type,
         }
+        if "full_memories" in raw_entry:
+            entry_data["full_memories"] = raw_entry["full_memories"]
         if isinstance(raw_memories, dict):
             first = next(iter(raw_memories.values()), None)
             if isinstance(first, dict):
@@ -222,6 +224,8 @@ def _hydrate_checkpoint_entry(
             "results": {},
             "failure_type": resolved_leak,
         }
+        if "full_memories" in entry:
+            entry_data["full_memories"] = entry["full_memories"]
         # Preserve CIM-specific fields so checkpoint resume keeps them
         if resolved_leak == "cim":
             for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
@@ -322,6 +326,8 @@ def extract_entries_from_checkpoint(checkpoint: Checkpoint) -> list[InputEntry]:
             "hash_id": hash_id,
             "failure_type": entry_data.get("failure_type"),
         }
+        if "full_memories" in entry_data:
+            entry["full_memories"] = entry_data["full_memories"]
         # Restore CIM-specific fields persisted by _hydrate_checkpoint_entry
         for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
                     "cim_task", "cim_recipient", "attribute_memory_map"):

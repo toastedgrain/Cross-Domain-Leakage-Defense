@@ -6,7 +6,7 @@
   "prompt_template": "prompts/evaluation_tree_informed.txt",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
-  "concurrency": 25,
+  "concurrency": 10,
   "models": [
     {
       "name": "google/gemini-3.1-pro-preview",
