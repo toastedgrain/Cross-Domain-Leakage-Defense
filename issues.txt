@@ -1,12 +1,36 @@
-TODO
--fix per-model input when using partitioned/tree, benchmark still loads main input file -- it's currently broken
--remove redudent queries from cim samples -- all samples have the same query
--look into deepseek labeling, fix format and voting
--add per-model output path -- this will be helpful when running more results
--build cim tree by using (label, memory) pairs to help the model get better context -- right now it only uses the flat list of memories
--change benchmark_runner.py to check method, and have one function to handle both dataset per method instaed of having one for each dataset
+TODO:
+- GLW 4.7 tree run
+- 
 
-Done:
-fix persistbench partitioned_labeled
-fixt cim input tool, no need for cim_path
-fix cim output format to be consistent
+## Config Run Tracker
+
+| Config                                      | Status  |
+|---------------------------------------------|---------|
+| config_baseline.json                        | [✅]     |
+| config_defence_gepa.json                    | [✅]     |
+| config_defence_permissive.json              | [✅]     |
+| config_defence_restrictive.json             | [✅]     |
+| config_defence_rubric_informed.json         | [✅]     |
+################
+| config_partitioned_cos.json                 | [✅]     |
+| config_partitioned_custom.json              | [✅]     |
+| config_partitioned_custom_defence_gepa.json | [✅]     |
+| config_partitioned_custom_defence_permissive.json | [✅] |
+| config_partitioned_custom_defence_restrictive.json | [✅] |
+| config_partitioned_custom_defence_rubric_informed.json| [✅] |
+################
+| config_partitioned.json                     | [✅]     |
+| config_partitioned_defence_gepa.json        | [✅]     | 
+| config_partitioned_defence_permissive.json  | [✅]     |
+| config_partitioned_defence_restrictive.json | [✅]     |
+| config_partitioned_defence_rubric_informed.json| [✅]     |
+ ###############
+| config_rag_tau0.5.json                      | [ ]     |
+| config_tree_informed.json                   | [✅]     |
+
+Status key: [ ] = not started | [⏳] = running | [✅] = done
+
+Config exmaples
+
+endpoint = "https://algoverse-hakeem.services.ai.azure.com/openai/v1/"
+model_name = "Llama-3.3-70B-Instruct"
