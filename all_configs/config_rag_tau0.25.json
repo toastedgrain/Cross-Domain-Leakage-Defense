@@ -1,0 +1,44 @@
+{
+  "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.25.jsonl",
+  "output": "outputs/persistbench/all_configs/rag/output_all_models_rag_tau0.25.json",
+  "dataset": "persistbench",
+  "judge_provider": "vertexai",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 50,
+  "models": [
+    {
+      "name": "DeepSeek-V3.2",
+      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": ""
+    },
+    {
+      "name": "gpt-oss-120b",
+      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": ""
+    },
+    {
+      "name": "xai/grok-4.1-fast-non-reasoning",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    },
+    {
+      "name": "zai-org/glm-4.7-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    }
+  ]
+}
