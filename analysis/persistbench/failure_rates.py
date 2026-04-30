@@ -32,13 +32,17 @@ THRESHOLDS: dict[str, tuple[int, bool]] = {
 
 # Display order of failure types in the table.
 FT_ORDER = ["cross_domain", "beneficial_memory_usage", "sycophancy"]
-FT_HEADER = {"cross_domain": "CD%", "beneficial_memory_usage": "Bnf%", "sycophancy": "Syc%"}
+FT_HEADER = {"cross_domain": "CD", "beneficial_memory_usage": "Bnf", "sycophancy": "Syc"}
 
 # Model ID -> short label. Order here is the order in the table.
 MODELS: dict[str, str] = {
-    "meta/llama-3.3-70b-instruct-maas": "Llama 3.3-70B",
-    "qwen/qwen3-235b-a22b-instruct-2507-maas": "Qwen 3-235B",
-    "google/gemini-3.1-pro-preview": "Gemini 3.1 Pro",
+    "meta/llama-3.3-70b-instruct-maas": "Llama 70B",
+    "qwen/qwen3-235b-a22b-instruct-2507-maas": "Qwen 235B",
+    "DeepSeek-V3.2": "DSV3.2",
+    "gpt-oss-120b": "gpt-oss",
+    "zai-org/glm-4.7-maas": "GLM-4.7",
+    "xai/grok-4.1-fast-non-reasoning": "Grok 4.1",
+    "google/gemini-3.1-pro-preview": "Gemini 3.1",
 }
 
 # Methods Gemini was run on. For each, we list every file that contributes
@@ -47,76 +51,95 @@ METHODS: dict[str, list[str]] = {
     "baseline": [
         "baseline/persist_full_gemini3_pro.json",
         "baseline/persist_full_llama3p3_70b_qwen3_235b.json",
+        "all_configs/baseline/output_all_models_baseline.json",
     ],
     "defence: permissive": [
         "defence/persist_permissive_gemini3_pro.json",
         "defence/persist_full_permissive_llama3p3_70b_qwen3_235b.json",
+        "all_configs/defence/output_all_models_permissive.json",
     ],
     "defence: restrictive": [
         "defence/persist_restrictive_gemini3_pro.json",
         "defence/persist_full_restrictive_llama3p3_70b_qwen3_235b.json",
+        "all_configs/defence/output_all_models_restrictive.json",
     ],
     "defence: rubric_informed": [
         "defence/persist_rubric_informed_gemini3_pro.json",
         "defence/persist_full_rubric_informed_llama3p3_70b_qwen3_235b.json",
+        "all_configs/defence/output_all_models_rubric_informed.json",
     ],
     "defence: gepa_optimized": [
         "defence/persist_gepa_optimized_gemini3_pro.json",
         "defence/persist_full_gepa_optimized_llama3p3_70b_qwen3_235b.json",
+        "all_configs/defence/output_all_models_gepa.json",
     ],
     "partitioned": [
         "partitioned/persist_partitioned_gemini3_pro.json",
         "partitioned/without_empty_categories/persist_full_partitioned_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned/output_all_models_partitioned.json",
     ],
     "partitioned + permissive": [
         "partitioned_defence/persist_partitioned_permissive_gemini3_pro.json",
         "partitioned_defence/persist_full_partitioned_permissive_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_defence/output_all_models_partitioned_permissive.json",
     ],
     "partitioned + restrictive": [
         "partitioned_defence/persist_partitioned_restrictive_gemini3_pro.json",
         "partitioned_defence/persist_full_partitioned_restrictive_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_defence/output_all_models_partitioned_restrictive.json",
     ],
     "partitioned + rubric_informed": [
         "partitioned_defence/persist_partitioned_rubric_informed_gemini3_pro.json",
         "partitioned_defence/persist_full_partitioned_rubric_informed_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_defence/output_all_models_partitioned_rubric_informed.json",
     ],
     "partitioned + gepa_optimized": [
         "partitioned_defence/persist_partitioned_gepa_optimized_gemini3_pro.json",
         "partitioned_defence/persist_full_partitioned_GEPA_optimized_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_defence/output_all_models_partitioned_gepa.json",
     ],
     "partitioned (custom cats)": [
         "partitioned_custom_categories/persist_partitioned_custom_categories_gemini3_pro.json",
         "partitioned_custom_categories/without_empty_categories/persist_full_partitioned_model_custom_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_custom/output_all_models_partitioned_custom.json",
     ],
     "partitioned (custom) + permissive": [
         "partitioned_custom_categories_defence/persist_partitioned_custom_permissive_gemini3_pro.json",
+        "all_configs/partitioned_custom_defence/output_all_models_partitioned_custom_permissive.json",
     ],
     "partitioned (custom) + restrictive": [
         "partitioned_custom_categories_defence/persist_partitioned_custom_restrictive_gemini3_pro.json",
+        "all_configs/partitioned_custom_defence/output_all_models_partitioned_custom_restrictive.json",
     ],
     "partitioned (custom) + rubric_informed": [
         "partitioned_custom_categories_defence/persist_partitioned_custom_rubric_informed_gemini3_pro.json",
         "partitioned_custom_categories_defence/persist_full_partitioned_custom_rubric_informed_optimized_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_custom_defence/output_all_models_partitioned_custom_rubric_informed.json",
     ],
     "partitioned (custom) + gepa_optimized": [
         "partitioned_custom_categories_defence/persist_partitioned_custom_gepa_optimized_gemini3_pro.json",
         "partitioned_custom_categories_defence/persist_full_partitioned_custom_categories_GEPA_optimized_llama3p3_70b_qwen3_235b.json",
+        "all_configs/partitioned_custom_defence/output_all_models_partitioned_custom_gepa.json",
     ],
     "rag tau=0.25": [
         "rag/persist_rag_tau0.25_gemini3_pro.json",
         "rag/persist_rag_tau0.25_llama3p3_70b_qwen3_235b.json",
+        "all_configs/rag/output_all_models_rag_tau0.25.json",
     ],
     "rag tau=0.50": [
         "rag/persist_rag_tau0.5_gemini3_pro.json",
         "rag/persist_rag_tau0.5_llama3p3_70b_qwen3_235b.json",
+        "all_configs/rag/output_all_models_rag_tau0.5.json",
     ],
     "rag tau=0.75": [
         "rag/persist_rag_tau0.75_gemini3_pro.json",
         "rag/persist_rag_tau0.75_llama3p3_70b_qwen3_235b.json",
+        "all_configs/rag/output_all_models_rag_tau0.75.json",
     ],
     "informed_tree": [
         "tree/persist_informed_tree_gemini3_pro.json",
         "tree/output_persistbench_informed_tree_llama3p3_qwen3.json",
+        "all_configs/tree/output_all_models_tree_informed.json",
     ],
 }
 
@@ -181,7 +204,7 @@ def fr_at_k(
 
 
 def format_cell(value: float | None) -> str:
-    return "  -  " if value is None else f"{value:5.1f}"
+    return " - " if value is None else f"{value:3.0f}"
 
 
 def main() -> None:
@@ -196,9 +219,9 @@ def main() -> None:
     k = args.k
 
     # Build column header: per-model group of three failure-type subcolumns.
-    label_w = max(len(name) for name in METHODS) + 2
-    cell_w = 5
-    gap = " " * 2
+    label_w = max(len(name) for name in METHODS) + 1
+    cell_w = 3
+    gap = " "
 
     def model_block(values: list[str]) -> str:
         return gap.join(f"{v:>{cell_w}}" for v in values)

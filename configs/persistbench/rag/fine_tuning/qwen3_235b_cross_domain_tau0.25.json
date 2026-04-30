@@ -1,0 +1,19 @@
+{
+  "models": [
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      }
+    }
+  ],
+  "dataset": "persistbench",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "judge_provider": "vertexai",
+  "input": "benchmark_samples/persistbench/rag/persistbench_rag_cross_domain_tau0.25.jsonl",
+  "output": "outputs/persistbench/rag/fine_tuning/persist_rag_cross_domain_tau0.25_qwen3_235b.json",
+  "concurrency": 50
+}

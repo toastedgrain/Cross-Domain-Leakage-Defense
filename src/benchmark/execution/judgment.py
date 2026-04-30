@@ -158,7 +158,8 @@ class SequentialJudgmentExecutor:
         if not tasks:
             return
 
-        self._semaphore = asyncio.Semaphore(config.concurrency)
+        judge_conc = config.judge_concurrency if config.judge_concurrency is not None else config.concurrency
+        self._semaphore = asyncio.Semaphore(judge_conc)
         checkpoint_writer = CheckpointWriter(checkpoint, config.output)
 
         success_count = 0
