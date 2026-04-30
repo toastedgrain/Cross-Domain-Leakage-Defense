@@ -1,5 +1,5 @@
 TODO:
-- GLW 4.7 tree run
+-
 - 
 
 ## Config Run Tracker
@@ -25,8 +25,9 @@ TODO:
 | config_partitioned_defence_restrictive.json | [✅]     |
 | config_partitioned_defence_rubric_informed.json| [✅]     |
  ###############
-| config_rag_tau0.5.json                      | [ ]     |
-| config_tree_informed.json                   | [✅]     |
+| config_rag_tau0.5.json                      | [⏳]  |
+| Llama 3.3 and Qwen 3 Sycophancy samples     | [⏳]  |
+| config_tree_informed.json                   | [✅]  |
 
 Status key: [ ] = not started | [⏳] = running | [✅] = done
 
@@ -34,3 +35,15 @@ Config exmaples
 
 endpoint = "https://algoverse-hakeem.services.ai.azure.com/openai/v1/"
 model_name = "Llama-3.3-70B-Instruct"
+
+,
+    {
+      "name": "meta/llama-3.3-70b-instruct-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "us-central1",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/partitioned_custom_categories/llama3p3_70b/sycophancy.jsonl"
+    },
