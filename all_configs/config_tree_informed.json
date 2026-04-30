@@ -45,7 +45,7 @@
     {
       "name": "meta/llama-3.3-70b-instruct-maas",
       "provider": "vertexai",
-      "mode": "batch",
+      "mode": "sequential",
       "api_params": {
         "location": "us-central1",
         "max_output_tokens": 1024
@@ -55,7 +55,7 @@
     {
       "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
       "provider": "vertexai",
-      "mode": "batch",
+      "mode": "sequential",
       "api_params": {
         "location": "us-south1",
         "max_output_tokens": 1024
