@@ -112,6 +112,7 @@ class BenchmarkConfig(BaseModel):
     store_raw_api_responses: bool = False
     generations: PositiveInt | None = None
     concurrency: PositiveInt = 1
+    judge_concurrency: PositiveInt | None = None
     limit: PositiveInt | None = None
     batch_poll_timeout_minutes: PositiveInt = 25
     prompt_template: Path | None = None
