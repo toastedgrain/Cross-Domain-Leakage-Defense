@@ -61,6 +61,16 @@
         "max_output_tokens": 1024
       },
       "input": "benchmark_samples/persistbench/partitioned_custom_categories/qwen3_235b/full_benchmark.jsonl"
+    },
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/partitioned_custom_categories/gemini3p1_pro/full_benchmark.jsonl"
     }
   ]
 }

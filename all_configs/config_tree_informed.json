@@ -61,6 +61,16 @@
         "max_output_tokens": 1024
       },
       "input": "benchmark_samples/persistbench/tree/qwen3_235b/cross_domain_and_beneficial_tree_qwen3.jsonl"
+    },
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/gemini3p1_pro/cross_domain_and_beneficial_tree_qwen3.jsonl"
     }
   ]
 }

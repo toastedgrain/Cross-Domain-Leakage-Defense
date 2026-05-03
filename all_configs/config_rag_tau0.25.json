@@ -39,6 +39,35 @@
         "max_output_tokens": 1024
       },
       "input": ""
+    },{
+      "name": "meta/llama-3.3-70b-instruct-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "us-central1",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/llama3p3_70b/cross_domain_and_beneficial_tree_llama3p3.jsonl"
+    },
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "us-south1",
+        "max_output_tokens": 1024
+      },
+      "input": "benchmark_samples/persistbench/tree/qwen3_235b/cross_domain_and_beneficial_tree_qwen3.jsonl"
+    },
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
     }
   ]
 }
