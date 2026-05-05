@@ -1,9 +1,9 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/tree/output_all_models_tree_informed.json",
+  "output": "outputs/persistbench/all_configs/tree_defence/output_all_models_tree_gepa.json",
+  "prompt_template": "prompts/defensive/GEPA_optimized.txt",
   "dataset": "persistbench",
   "method": "tree",
-  "prompt_template": "prompts/evaluation_tree_informed.txt",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
   "concurrency": 75,

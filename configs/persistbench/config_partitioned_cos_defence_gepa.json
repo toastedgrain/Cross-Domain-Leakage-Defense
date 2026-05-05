@@ -1,26 +1,26 @@
 {
-  "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/tree/output_all_models_tree_informed.json",
+  "input": "benchmark_samples/persistbench/partitioned/cos_similarity/full_benchmark.jsonl",
+  "output": "outputs/persistbench/all_configs/partitioned_cos_defence/output_all_models_partitioned_cos_gepa.json",
+  "prompt_template": "prompts/defensive/GEPA_optimized.txt",
   "dataset": "persistbench",
-  "method": "tree",
-  "prompt_template": "prompts/evaluation_tree_informed.txt",
+  "method": "partitioned",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
-  "concurrency": 75,
+  "concurrency": 100,
   "models": [
     {
       "name": "DeepSeek-V3.2",
       "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
       "provider": "azure",
       "mode": "sequential",
-      "input": "benchmark_samples/persistbench/tree/DeepSeek-V3.2/full_benchmark.jsonl"
+      "input": ""
     },
     {
       "name": "gpt-oss-120b",
       "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
       "provider": "azure",
       "mode": "sequential",
-      "input": "benchmark_samples/persistbench/tree/gpt-oss-120b/full_benchmark.jsonl"
+      "input": ""
     },
     {
       "name": "xai/grok-4.1-fast-non-reasoning",
@@ -30,7 +30,7 @@
         "location": "global",
         "max_output_tokens": 1024
       },
-      "input": "benchmark_samples/persistbench/tree/xai_grok-4.1-fast-non-reasoning/full_benchmark.jsonl"
+      "input": ""
     },
     {
       "name": "zai-org/glm-4.7-maas",
@@ -40,7 +40,7 @@
         "location": "global",
         "max_output_tokens": 1024
       },
-      "input": "benchmark_samples/persistbench/tree/zai-org_glm-4.7-maas/full_benchmark.jsonl"
+      "input": ""
     },
     {
       "name": "meta/llama-3.3-70b-instruct-maas",
@@ -50,17 +50,17 @@
         "location": "us-central1",
         "max_output_tokens": 1024
       },
-      "input": "benchmark_samples/persistbench/tree/llama3p3_70b/full_benchmark.jsonl"
+      "input": ""
     },
     {
       "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
       "provider": "vertexai",
       "mode": "sequential",
       "api_params": {
-        "location": "us-south1",
+        "location": "global",
         "max_output_tokens": 1024
       },
-      "input": "benchmark_samples/persistbench/tree/qwen3_235b/full_benchmark.jsonl"
+      "input": ""
     },
     {
       "name": "google/gemini-3.1-pro-preview",
@@ -70,7 +70,7 @@
         "location": "global",
         "max_output_tokens": 1024
       },
-      "input": "benchmark_samples/persistbench/tree/gemini3p1_pro/full_benchmark.jsonl"
+      "input": ""
     }
   ]
 }
