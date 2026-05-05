@@ -51,6 +51,12 @@ METRICS = [
     ("Benef", "Beneficial"),
 ]
 
+MEMORY_STRUCTURES = [
+    ("Flat Memory List", "Flat Memory List"),
+    ("Partitions", "Fixed Partitions"),
+    ("Dynamic Partitions", "Dynamic Partitions"),
+]
+
 # Values are failure rates from the provided table.
 # Shape: method -> defence -> model -> metric.
 DATA = {
@@ -258,37 +264,52 @@ def annotate_heatmap(ax, matrix: np.ndarray) -> None:
             )
 
 
-def draw_memory_structure(memory_structure: str) -> None:
+def draw_metric(metric_key: str, metric_label: str) -> None:
     fig = plt.figure(figsize=(14.2, 5.9))
     gridspec = fig.add_gridspec(
         nrows=1,
-        ncols=4,
-        width_ratios=[1, 1, 1, 0.055],
-        wspace=0.24,
+        ncols=6,
+        width_ratios=[1, 0.055, 1, 0.055, 1, 0.055],
+        wspace=0.12,
     )
 
     cmap = plt.get_cmap("RdYlGn_r").copy()
     image = None
 
-    for index, (metric_key, metric_label) in enumerate(METRICS):
-        ax = fig.add_subplot(gridspec[0, index])
+    for index, (memory_structure, display_label) in enumerate(MEMORY_STRUCTURES):
+        ax = fig.add_subplot(gridspec[0, index * 2])
         matrix = metric_matrix(memory_structure, metric_key)
         image = ax.imshow(matrix, cmap=cmap, vmin=0, vmax=100, aspect="equal")
 
-        style_heatmap_axis(ax, metric_label)
+        style_heatmap_axis(ax, display_label)
         annotate_heatmap(ax, matrix)
 
         if index != 0:
             ax.set_yticklabels([])
 
-    cax = fig.add_subplot(gridspec[0, 3])
+        if index < len(MEMORY_STRUCTURES) - 1:
+            arrow_ax = fig.add_subplot(gridspec[0, index * 2 + 1])
+            arrow_ax.axis("off")
+            arrow_ax.text(
+                0.5,
+                0.52,
+                "→",
+                ha="center",
+                va="center",
+                fontsize=26,
+                fontweight="semibold",
+                color="#444444",
+                transform=arrow_ax.transAxes,
+            )
+
+    cax = fig.add_subplot(gridspec[0, 5])
     colorbar = fig.colorbar(image, cax=cax)
     colorbar.set_label("Failure rate (%)", fontsize=11, fontweight="semibold")
     colorbar.set_ticks([0, 20, 40, 60, 80, 100])
     colorbar.ax.tick_params(labelsize=10, length=3)
 
     fig.suptitle(
-        memory_structure,
+        metric_label,
         fontsize=16,
         fontweight="semibold",
         y=0.98,
@@ -296,15 +317,15 @@ def draw_memory_structure(memory_structure: str) -> None:
     )
     fig.subplots_adjust(left=0.095, right=0.94, bottom=0.19, top=0.86)
 
-    stem = f"{filename_safe(memory_structure)}_failure_rate_heat_map"
+    stem = f"{filename_safe(metric_label)}_failure_rate_heat_map"
     fig.savefig(OUTDIR / f"{stem}.png", bbox_inches="tight")
     fig.savefig(OUTDIR / f"{stem}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
 def main() -> None:
-    for memory_structure in DATA:
-        draw_memory_structure(memory_structure)
+    for metric_key, metric_label in METRICS:
+        draw_metric(metric_key, metric_label)
 
     print(f"Figures saved to: {OUTDIR.resolve()}")
 
