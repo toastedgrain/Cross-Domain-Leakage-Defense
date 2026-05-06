@@ -16,6 +16,8 @@ OUTPUTS = REPO_ROOT / "outputs" / "persistbench" / "all_configs"
 SAMPLES = REPO_ROOT / "benchmark_samples" / "persistbench"
 SPLIT_DIR = SCRIPT_DIR / "diff_samples_split"
 TEX_OUT = SCRIPT_DIR / "partition_method_comparisons.tex"
+PARTITIONED_WORSE_TEX_OUT = SCRIPT_DIR / "partitioned_memories_perform_worse.tex"
+PARTITIONED_WORSE_TXT_OUT = SCRIPT_DIR / "partitioned_memories_perform_worse.txt"
 FOCUSED_TEX_OUTPUTS = [
     (
         "Cos Similarity Partitioned -> Partitioned",
@@ -32,6 +34,10 @@ FOCUSED_TEX_OUTPUTS = [
         SCRIPT_DIR / "dynamic_partitioned_better_than_partitioned.tex",
         "Dynamic Partitioned Better Than Partitioned",
     ),
+]
+PARTITIONED_WORSE_COMPARISONS = [
+    "Partitioned -> Cos Similarity Partitioned",
+    "Partitioned -> Dynamic Partitioned",
 ]
 
 MODELS: dict[str, dict[str, str]] = {
@@ -599,6 +605,57 @@ def build_focused_tex_outputs() -> list[pathlib.Path]:
     return outputs
 
 
+def build_partitioned_worse_outputs() -> list[pathlib.Path]:
+    description = (
+        "Scores are the highest valid judge score across three runs. Scores range "
+        "from 1 to 5, and higher is worse. This file collects top cross-domain "
+        "samples where fixed Partitioned memories are worse than another "
+        "partitioning method."
+    )
+    lines = tex_header("Partitioned Memories Perform Worse", description)
+    txt_lines = [
+        "Partitioned memories perform worse\n",
+        "Score rule: max(valid judge scores across 3 runs); higher is worse.\n",
+        "Included comparisons: "
+        + ", ".join(PARTITIONED_WORSE_COMPARISONS)
+        + "\n\n",
+    ]
+
+    for model_id, model_meta in MODELS.items():
+        lines.append(f"\\section*{{{tex_escape(model_meta['label'])}}}\n")
+        txt_lines.append(f"{model_meta['label']}\n")
+        txt_lines.append("-" * len(model_meta["label"]) + "\n")
+        model_dir = SPLIT_DIR / model_meta["slug"]
+
+        for comparison_name in PARTITIONED_WORSE_COMPARISONS:
+            matching = None
+            for first, second in COMPARISONS:
+                if f"{first} -> {second}" == comparison_name:
+                    matching = (first, second)
+                    break
+            if matching is None:
+                raise RuntimeError(f"Unknown comparison: {comparison_name}")
+            first, second = matching
+            path = model_dir / f"{slug(first)}_to_{slug(second)}.json"
+            data = json.loads(path.read_text(encoding="utf-8"))
+
+            lines.append(f"\\subsection*{{{tex_escape(comparison_name)}}}\n")
+            txt_lines.append(f"\n{comparison_name}\n")
+            for sample in data["samples"]:
+                score = sample["score_change"]
+                txt_lines.append(
+                    f"  {sample['rank']}. {sample['hash_id']}  "
+                    f"{score['from_score']}->{score['to_score']}  "
+                    f"+{score['improvement']}\n"
+                )
+                lines.append(sample_box(model_meta["label"], comparison_name, sample))
+        txt_lines.append("\n")
+
+    PARTITIONED_WORSE_TEX_OUT.write_text("".join(lines), encoding="utf-8")
+    PARTITIONED_WORSE_TXT_OUT.write_text("".join(txt_lines), encoding="utf-8")
+    return [PARTITIONED_WORSE_TEX_OUT, PARTITIONED_WORSE_TXT_OUT]
+
+
 def build_tex() -> None:
     lines = tex_header(
         "Partition Method Differences: Top Cross-Domain Improvements",
@@ -623,11 +680,14 @@ def main() -> None:
     written = build_comparison_payloads()
     build_tex()
     focused_tex = build_focused_tex_outputs()
+    partitioned_worse_outputs = build_partitioned_worse_outputs()
     for path in written:
         print(path.relative_to(REPO_ROOT))
     print(f"Wrote {len(written)} JSON files")
     print(TEX_OUT.relative_to(REPO_ROOT))
     for path in focused_tex:
+        print(path.relative_to(REPO_ROOT))
+    for path in partitioned_worse_outputs:
         print(path.relative_to(REPO_ROOT))
 
 

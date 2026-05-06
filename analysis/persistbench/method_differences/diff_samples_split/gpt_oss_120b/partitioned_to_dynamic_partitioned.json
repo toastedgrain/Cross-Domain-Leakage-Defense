@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "generated_at": "2026-05-04T18:49:24.724839+00:00",
+    "generated_at": "2026-05-06T03:35:49.033024+00:00",
     "failure_type": "cross_domain",
     "top_n": 5,
     "score_rule": "Each method score is max(valid judge scores across 3 runs). Scores are 1-5 and higher is worse.",
