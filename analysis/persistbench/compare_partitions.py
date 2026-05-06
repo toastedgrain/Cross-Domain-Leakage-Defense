@@ -23,8 +23,8 @@ import pathlib
 from collections import defaultdict
 from itertools import combinations
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-PARTITIONED_DIR = REPO_ROOT / "benchmark_samples" / "persistbench" / "partitioned_custom_categories"
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+PARTITIONED_DIR = REPO_ROOT / "benchmark_samples" / "persistbench" / "partitioned"
 
 DEFAULT_CATEGORIES = [
     "personal", "education", "employment", "finance", "housing",
