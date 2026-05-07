@@ -45,6 +45,9 @@ GRID_METHODS = [
     ["dynamic_partitions", "2_level_tree"],
 ]
 
+OVERALL_AVERAGE_COLOR = "#d9e8f5"
+OVERALL_AVERAGE_EDGE_COLOR = "#2f5f85"
+
 DOMAIN_ORDER = [
     "Personal Beliefs (Political, Religious, and Social)",
     "Educational and Formative Experiences",
@@ -214,6 +217,57 @@ def method_data(method: str, benchmark_path: Path) -> tuple[list[str], list[str]
     return domains, models, per_model, average
 
 
+def add_domain_averages(
+    matrix: np.ndarray,
+    counts: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    with_average = np.full((matrix.shape[0] + 1, matrix.shape[1] + 1), np.nan)
+    average_counts = np.zeros((counts.shape[0] + 1, counts.shape[1] + 1), dtype=int)
+
+    with_average[1:, :-1] = matrix
+    average_counts[1:, :-1] = counts
+
+    row_valid = np.isfinite(matrix)
+    weighted_counts = np.where(row_valid, counts, 0)
+    row_totals = np.nansum(matrix * weighted_counts, axis=1)
+    row_counts = np.sum(weighted_counts, axis=1)
+    with_average[1:, -1] = np.divide(
+        row_totals,
+        row_counts,
+        out=np.full(matrix.shape[0], np.nan, dtype=float),
+        where=row_counts > 0,
+    )
+    average_counts[1:, -1] = np.sum(counts, axis=1)
+
+    col_valid = np.isfinite(matrix)
+    weighted_counts = np.where(col_valid, counts, 0)
+    col_totals = np.nansum(matrix * weighted_counts, axis=0)
+    col_counts = np.sum(weighted_counts, axis=0)
+    with_average[0, :-1] = np.divide(
+        col_totals,
+        col_counts,
+        out=np.full(matrix.shape[1], np.nan, dtype=float),
+        where=col_counts > 0,
+    )
+    average_counts[0, :-1] = np.sum(counts, axis=0)
+
+    valid = np.isfinite(matrix)
+    weighted_counts = np.where(valid, counts, 0)
+    overall_count = np.sum(weighted_counts)
+    if overall_count > 0:
+        with_average[0, -1] = np.nansum(matrix * weighted_counts) / overall_count
+    average_counts[0, -1] = np.sum(counts)
+    return with_average, average_counts
+
+
+def reverse_query_domain_columns(
+    matrix: np.ndarray,
+    counts: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    query_order = list(range(matrix.shape[1] - 2, -1, -1)) + [matrix.shape[1] - 1]
+    return matrix[:, query_order], counts[:, query_order]
+
+
 def annotate_heatmap(ax, values: np.ndarray, counts: np.ndarray, *, fontsize: float) -> None:
     for row in range(values.shape[0]):
         for col in range(values.shape[1]):
@@ -232,17 +286,47 @@ def annotate_heatmap(ax, values: np.ndarray, counts: np.ndarray, *, fontsize: fl
             )
 
 
-def style_axis(ax, domains: list[str], *, title: str, show_x: bool = True, show_y: bool = True, tick_size: float = 8) -> None:
+def highlight_overall_average_cell(ax, values: np.ndarray) -> None:
+    ax.add_patch(
+        plt.Rectangle(
+            (values.shape[1] - 1.5, -0.5),
+            1,
+            1,
+            facecolor=OVERALL_AVERAGE_COLOR,
+            edgecolor=OVERALL_AVERAGE_EDGE_COLOR,
+            linewidth=1.4,
+            zorder=2,
+        )
+    )
+
+
+def style_axis(
+    ax,
+    domains: list[str],
+    *,
+    title: str,
+    show_x: bool = True,
+    show_y: bool = True,
+    tick_size: float = 8,
+    include_averages: bool = False,
+) -> None:
     labels = [domain_label(domain) for domain in domains]
+    x_labels = list(reversed(labels)) + ["Average"] if include_averages else list(reversed(labels))
+    y_labels = ["Average"] + labels if include_averages else labels
     ax.set_title(title, fontsize=12.5, fontweight="semibold", pad=10)
-    ax.set_xticks(range(len(domains)))
-    ax.set_xticklabels(labels if show_x else [], rotation=35, ha="right", rotation_mode="anchor")
-    ax.set_yticks(range(len(domains)))
-    ax.set_yticklabels(labels if show_y else [])
+    ax.set_xticks(range(len(x_labels)))
+    ax.set_xticklabels(x_labels if show_x else [], rotation=35, ha="right", rotation_mode="anchor")
+    ax.set_yticks(range(len(y_labels)))
+    ax.set_yticklabels(y_labels if show_y else [])
+    if include_averages:
+        if show_x:
+            ax.get_xticklabels()[-1].set_fontweight("bold")
+        if show_y:
+            ax.get_yticklabels()[0].set_fontweight("bold")
     ax.tick_params(axis="x", labelsize=tick_size)
     ax.tick_params(axis="y", labelsize=tick_size)
-    ax.set_xticks(np.arange(-0.5, len(domains), 1), minor=True)
-    ax.set_yticks(np.arange(-0.5, len(domains), 1), minor=True)
+    ax.set_xticks(np.arange(-0.5, len(x_labels), 1), minor=True)
+    ax.set_yticks(np.arange(-0.5, len(y_labels), 1), minor=True)
     ax.grid(which="minor", color="white", linestyle="-", linewidth=1.1)
     ax.tick_params(axis="both", which="major", length=0)
     ax.tick_params(which="minor", bottom=False, left=False)
@@ -261,14 +345,17 @@ def save_single_heatmap(
     title: str,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig, ax = plt.subplots(figsize=(8.4, 7.4))
+    plot_matrix, plot_counts = add_domain_averages(matrix, counts)
+    plot_matrix, plot_counts = reverse_query_domain_columns(plot_matrix, plot_counts)
+    fig, ax = plt.subplots(figsize=(9.1, 8.0))
     cmap = plt.get_cmap("YlOrRd").copy()
     cmap.set_bad("#f0f0f0")
-    image = ax.imshow(matrix, cmap=cmap, vmin=0, vmax=5, aspect="equal")
-    style_axis(ax, domains, title=title)
+    image = ax.imshow(plot_matrix, cmap=cmap, vmin=0, vmax=5, aspect="equal")
+    style_axis(ax, domains, title=title, include_averages=True)
     ax.set_xlabel("Query domain", fontweight="semibold", labelpad=8)
     ax.set_ylabel("Memory domain", fontweight="semibold", labelpad=8)
-    annotate_heatmap(ax, matrix, counts, fontsize=7.4)
+    highlight_overall_average_cell(ax, plot_matrix)
+    annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=7.0)
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.025)
     colorbar.set_label("Average Score", fontsize=10.5, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
@@ -284,7 +371,7 @@ def save_2x2(
     title_suffix: str,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(15.5, 12.3), constrained_layout=False)
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14.8, 11.6), constrained_layout=False)
     cmap = plt.get_cmap("YlOrRd").copy()
     cmap.set_bad("#f0f0f0")
     image = None
@@ -292,26 +379,32 @@ def save_2x2(
     for row_index, row in enumerate(GRID_METHODS):
         for col_index, method in enumerate(row):
             domains, matrix, counts = matrices[method]
+            plot_matrix, plot_counts = add_domain_averages(matrix, counts)
+            plot_matrix, plot_counts = reverse_query_domain_columns(plot_matrix, plot_counts)
             ax = axes[row_index, col_index]
-            image = ax.imshow(matrix, cmap=cmap, vmin=0, vmax=5, aspect="equal")
+            image = ax.imshow(plot_matrix, cmap=cmap, vmin=0, vmax=5, aspect="equal")
             style_axis(
                 ax,
                 domains,
                 title=MEMORY_STRUCTURES[method]["label"],
                 show_x=True,
-                show_y=(col_index == 0),
-                tick_size=7,
+                show_y=True,
+                tick_size=5.8,
+                include_averages=True,
             )
-            annotate_heatmap(ax, matrix, counts, fontsize=5.8)
+            ax.tick_params(axis="y", pad=1)
+            ax.tick_params(axis="x", pad=1)
+            highlight_overall_average_cell(ax, plot_matrix)
+            annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=5.1)
 
     colorbar_ax = fig.add_axes([0.865, 0.19, 0.018, 0.66])
     colorbar = fig.colorbar(image, cax=colorbar_ax)
     colorbar.set_label("Average Score", fontsize=10.5, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    fig.supxlabel("Query domain", fontsize=12, fontweight="semibold", y=0.045)
-    fig.supylabel("Memory domain", fontsize=12, fontweight="semibold", x=0.055)
-    fig.suptitle(title_suffix, fontsize=14, fontweight="semibold", y=0.98)
-    fig.subplots_adjust(left=0.13, right=0.845, bottom=0.13, top=0.92, wspace=0.0, hspace=0.28)
+    fig.supxlabel("Query domain", fontsize=12, fontweight="semibold", y=0.06)
+    fig.supylabel("Memory domain", fontsize=12, fontweight="semibold", x=0.075)
+    fig.suptitle(title_suffix, fontsize=14, fontweight="semibold", y=0.965)
+    fig.subplots_adjust(left=0.12, right=0.845, bottom=0.12, top=0.91, wspace=0.06, hspace=0.18)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 

@@ -15,6 +15,7 @@ from analysis.persistbench.figures.cross_domain_pair_domain_scores import (
     DEFAULT_BENCHMARK,
     MEMORY_STRUCTURES,
     METHODS,
+    add_domain_averages,
     domain_label,
     method_data,
     sort_model,
@@ -36,9 +37,12 @@ def print_matrix_rows(
     counts,
 ) -> None:
     method_label = MEMORY_STRUCTURES[method]["label"]
-    for row_index, memory_domain in enumerate(domains):
-        for col_index, query_domain in enumerate(domains):
-            count = int(counts[row_index, col_index])
+    plot_matrix, plot_counts = add_domain_averages(matrix, counts)
+    memory_domains = ["Average"] + [domain_label(domain) for domain in domains]
+    query_domains = [domain_label(domain) for domain in domains] + ["Average"]
+    for row_index, memory_domain in enumerate(memory_domains):
+        for col_index, query_domain in enumerate(query_domains):
+            count = int(plot_counts[row_index, col_index])
             if count == 0:
                 continue
             print(
@@ -46,10 +50,10 @@ def print_matrix_rows(
                     [
                         method_label,
                         model,
-                        domain_label(memory_domain),
-                        domain_label(query_domain),
+                        memory_domain,
+                        query_domain,
                         str(count),
-                        format_value(float(matrix[row_index, col_index])),
+                        format_value(float(plot_matrix[row_index, col_index])),
                     ]
                 )
             )
