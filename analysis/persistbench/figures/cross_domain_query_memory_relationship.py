@@ -17,6 +17,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+DATA_TEXT_SIZE = 15
+AXIS_TEXT_SIZE = 15
+AXIS_NAME_TEXT_SIZE = 18
+TITLE_TEXT_SIZE = 21
+SCALE_TEXT_SIZE = 15
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BENCHMARK = (
     REPO_ROOT
@@ -54,11 +60,11 @@ DOMAIN_ORDER = [
 plt.rcParams.update(
     {
         "font.family": "DejaVu Sans",
-        "font.size": 10,
-        "axes.titlesize": 13,
-        "axes.labelsize": 11,
-        "xtick.labelsize": 9,
-        "ytick.labelsize": 9,
+        "font.size": AXIS_TEXT_SIZE,
+        "axes.titlesize": TITLE_TEXT_SIZE,
+        "axes.labelsize": AXIS_NAME_TEXT_SIZE,
+        "xtick.labelsize": AXIS_TEXT_SIZE,
+        "ytick.labelsize": AXIS_TEXT_SIZE,
         "figure.dpi": 160,
         "savefig.dpi": 300,
         "pdf.fonttype": 42,
@@ -163,8 +169,8 @@ def annotate(
                 formatter(value),
                 ha="center",
                 va="center",
-                fontsize=7.5,
-                fontweight="bold" if is_total else "semibold",
+                fontsize=DATA_TEXT_SIZE,
+                fontweight="bold",
                 color="#222222" if is_total else ("white" if value > threshold else "#222222"),
                 zorder=4,
             )
@@ -184,8 +190,8 @@ def style_domain_axes(
         x_texts[-1].set_fontweight("bold")
         ax.axhline(0.5, color="#333333", linewidth=1.5, zorder=3)
         ax.axvline(len(x_domains) - 1.5, color="#333333", linewidth=1.5, zorder=3)
-    ax.set_xlabel("Query domain", fontweight="semibold", labelpad=8)
-    ax.set_ylabel("Memory domain", fontweight="semibold", labelpad=8)
+    ax.set_xlabel("Query domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=8)
+    ax.set_ylabel("Memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=8)
     ax.set_xticks(np.arange(-0.5, len(x_domains), 1), minor=True)
     ax.set_yticks(np.arange(-0.5, len(y_domains), 1), minor=True)
     ax.grid(which="minor", color="white", linestyle="-", linewidth=1.2)
@@ -224,7 +230,7 @@ def save_heatmap(
         values = append_totals(values)
         x_domains = [*x_domains, "Total"]
         y_domains = ["Total", *y_domains]
-    fig, ax = plt.subplots(figsize=(8.2, 7.1))
+    fig, ax = plt.subplots(figsize=(12.2, 10.6))
     cmap = plt.get_cmap(cmap_name).copy()
     image = ax.imshow(values, cmap=cmap, vmin=vmin, vmax=vmax, aspect="equal")
     if with_totals:
@@ -232,12 +238,13 @@ def save_heatmap(
         gray = "#d4d4d4"
         ax.add_patch(plt.Rectangle((-0.5, -0.5), n_cols, 1, facecolor=gray, edgecolor="none", zorder=2))
         ax.add_patch(plt.Rectangle((n_cols - 1.5, -0.5), 1, n_rows, facecolor=gray, edgecolor="none", zorder=2))
-    ax.set_title(title, fontsize=13, fontweight="semibold", pad=12)
+    ax.set_title(title, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", pad=16)
     style_domain_axes(ax, x_domains, y_domains, has_total=with_totals)
     annotate(ax, values, formatter, has_total=with_totals, data_vmax=data_vmax)
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.025)
-    colorbar.set_label(colorbar_label, fontsize=10.5, fontweight="semibold")
-    fig.subplots_adjust(left=0.19, right=0.92, bottom=0.21, top=0.9)
+    colorbar.set_label(colorbar_label, fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
+    fig.subplots_adjust(left=0.22, right=0.92, bottom=0.29, top=0.86)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 

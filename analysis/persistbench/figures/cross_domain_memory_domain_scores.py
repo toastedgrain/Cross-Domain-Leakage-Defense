@@ -21,6 +21,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+DATA_TEXT_SIZE = 22
+AXIS_TEXT_SIZE = 24
+AXIS_NAME_TEXT_SIZE = 24
+TITLE_TEXT_SIZE = 26
+SCALE_TEXT_SIZE = 24
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 OUTPUTS = REPO_ROOT / "outputs" / "persistbench"
 DEFAULT_BASELINE_DIR = OUTPUTS / "baseline"
@@ -172,11 +178,11 @@ DOMAIN_LABELS = {
 plt.rcParams.update(
     {
         "font.family": "DejaVu Sans",
-        "font.size": 10,
-        "axes.titlesize": 13,
-        "axes.labelsize": 11,
-        "xtick.labelsize": 9.5,
-        "ytick.labelsize": 11,
+        "font.size": AXIS_TEXT_SIZE,
+        "axes.titlesize": TITLE_TEXT_SIZE,
+        "axes.labelsize": AXIS_NAME_TEXT_SIZE,
+        "xtick.labelsize": AXIS_TEXT_SIZE,
+        "ytick.labelsize": AXIS_TEXT_SIZE,
         "figure.dpi": 160,
         "savefig.dpi": 300,
         "pdf.fonttype": 42,
@@ -320,7 +326,7 @@ def annotate_heatmap(
                 ha="center",
                 va="center",
                 fontsize=fontsize,
-                fontweight="semibold",
+                fontweight="bold",
                 color=color,
             )
 
@@ -386,8 +392,8 @@ def draw_heatmap(
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    fig_width = max(8.9, 0.78 * len(domains) + 1.9)
-    fig_height = max(7.2, 0.82 * len(models) + 1.5)
+    fig_width = max(12.4, 1.18 * len(domains) + 2.8)
+    fig_height = max(9.6, 1.18 * len(models) + 2.0)
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     cmap = plt.get_cmap("YlOrRd").copy()
@@ -400,17 +406,17 @@ def draw_heatmap(
         title=title,
         show_y_labels=True,
         show_x_labels=True,
-        title_size=13.5,
+        title_size=TITLE_TEXT_SIZE,
     )
-    ax.set_xlabel("Sample memory domain", fontweight="semibold", labelpad=10)
-    annotate_heatmap(ax, averages, counts, fontsize=8.0)
+    ax.set_xlabel("Sample memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=10)
+    annotate_heatmap(ax, averages, counts, fontsize=DATA_TEXT_SIZE)
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.04, pad=0.02)
-    colorbar.set_label("Average Score", fontsize=11, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([1, 2, 3, 4, 5])
-    colorbar.ax.tick_params(labelsize=10, length=3)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
     
-    fig.subplots_adjust(left=0.18, right=0.9, bottom=0.2, top=0.88)
+    fig.subplots_adjust(left=0.20, right=0.9, bottom=0.29, top=0.84)
 
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
     # fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
@@ -429,7 +435,7 @@ def draw_transition_figure(benchmark_path: Path, output_dir: Path) -> None:
         )
         figure_data.append((config["label"], models, domains, averages, counts))
 
-    fig = plt.figure(figsize=(19.0, 5.4))
+    fig = plt.figure(figsize=(29.0, 10.2))
     gridspec = fig.add_gridspec(
         nrows=1,
         ncols=6,
@@ -450,11 +456,11 @@ def draw_transition_figure(benchmark_path: Path, output_dir: Path) -> None:
             title=title,
             show_y_labels=(index == 0),
             show_x_labels=True,
-            title_size=12,
-            x_tick_size=6,
-            y_tick_size=9,
+            title_size=TITLE_TEXT_SIZE,
+            x_tick_size=AXIS_TEXT_SIZE,
+            y_tick_size=AXIS_TEXT_SIZE,
         )
-        annotate_heatmap(ax, averages, counts, fontsize=4.7)
+        annotate_heatmap(ax, averages, counts, fontsize=DATA_TEXT_SIZE)
 
         if index < len(figure_data) - 1:
             arrow_ax = fig.add_subplot(gridspec[0, index * 2 + 1])
@@ -465,7 +471,7 @@ def draw_transition_figure(benchmark_path: Path, output_dir: Path) -> None:
                 "→",
                 ha="center",
                 va="center",
-                fontsize=23,
+                fontsize=TITLE_TEXT_SIZE,
                 fontweight="semibold",
                 color="#333333",
                 transform=arrow_ax.transAxes,
@@ -473,11 +479,11 @@ def draw_transition_figure(benchmark_path: Path, output_dir: Path) -> None:
 
     cax = fig.add_subplot(gridspec[0, 5])
     colorbar = fig.colorbar(image, cax=cax)
-    colorbar.set_label("Average Score", fontsize=11, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([1, 2, 3, 4, 5])
-    colorbar.ax.tick_params(labelsize=10, length=3)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
 
-    fig.subplots_adjust(left=0.065, right=0.95, bottom=0.23, top=0.84)
+    fig.subplots_adjust(left=0.075, right=0.95, bottom=0.34, top=0.78)
 
     output_stem = "flat_to_dynamic_transition_cross_domain_best_score_by_memory_domain"
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
@@ -491,7 +497,7 @@ def draw_four_method_grid(benchmark_path: Path, output_dir: Path) -> None:
     fig, axes = plt.subplots(
         nrows=2,
         ncols=2,
-        figsize=(17.0, 12.5),
+        figsize=(27.0, 20.5),
         constrained_layout=False,
     )
     cmap = plt.get_cmap("YlOrRd").copy()
@@ -514,11 +520,11 @@ def draw_four_method_grid(benchmark_path: Path, output_dir: Path) -> None:
                 title=config["label"],
                 show_y_labels=(col_index == 0),
                 show_x_labels=True,
-                title_size=12.5,
-                x_tick_size=7,
-                y_tick_size=9,
+                title_size=TITLE_TEXT_SIZE,
+                x_tick_size=AXIS_TEXT_SIZE,
+                y_tick_size=AXIS_TEXT_SIZE,
             )
-            annotate_heatmap(ax, averages, counts, fontsize=6.0)
+            annotate_heatmap(ax, averages, counts, fontsize=DATA_TEXT_SIZE)
 
     colorbar = fig.colorbar(
         image,
@@ -526,12 +532,12 @@ def draw_four_method_grid(benchmark_path: Path, output_dir: Path) -> None:
         fraction=0.025,
         pad=0.045,
     )
-    colorbar.set_label("Average Score", fontsize=11, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    colorbar.ax.tick_params(labelsize=10, length=3)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
 
-    fig.supxlabel("Sample memory domain", fontsize=12, fontweight="semibold", y=0.045)
-    fig.subplots_adjust(left=0.09, right=0.86, bottom=0.13, top=0.93, wspace=0.08, hspace=0.28)
+    fig.supxlabel("Sample memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", y=0.035)
+    fig.subplots_adjust(left=0.10, right=0.86, bottom=0.18, top=0.88, wspace=0.12, hspace=0.36)
 
     output_stem = "all_methods_2x2_cross_domain_best_score_by_memory_domain"
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
@@ -545,7 +551,7 @@ def draw_cosine_vs_fixed_figure(benchmark_path: Path, output_dir: Path) -> None:
     fig, axes = plt.subplots(
         nrows=1,
         ncols=2,
-        figsize=(17.0, 6.4),
+        figsize=(25.0, 10.2),
         constrained_layout=False,
     )
     cmap = plt.get_cmap("YlOrRd").copy()
@@ -567,11 +573,11 @@ def draw_cosine_vs_fixed_figure(benchmark_path: Path, output_dir: Path) -> None:
             title=config["label"],
             show_y_labels=(index == 0),
             show_x_labels=True,
-            title_size=12.5,
-            x_tick_size=7,
-            y_tick_size=9,
+            title_size=TITLE_TEXT_SIZE,
+            x_tick_size=AXIS_TEXT_SIZE,
+            y_tick_size=AXIS_TEXT_SIZE,
         )
-        annotate_heatmap(ax, averages, counts, fontsize=6.0)
+        annotate_heatmap(ax, averages, counts, fontsize=DATA_TEXT_SIZE)
 
     colorbar = fig.colorbar(
         image,
@@ -579,12 +585,12 @@ def draw_cosine_vs_fixed_figure(benchmark_path: Path, output_dir: Path) -> None:
         fraction=0.03,
         pad=0.045,
     )
-    colorbar.set_label("Average Score", fontsize=11, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    colorbar.ax.tick_params(labelsize=10, length=3)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
 
-    fig.supxlabel("Sample memory domain", fontsize=12, fontweight="semibold", y=0.045)
-    fig.subplots_adjust(left=0.09, right=0.86, bottom=0.18, top=0.88, wspace=0.08)
+    fig.supxlabel("Sample memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", y=0.04)
+    fig.subplots_adjust(left=0.10, right=0.86, bottom=0.30, top=0.82, wspace=0.12)
 
     output_stem = "cosine_vs_inference_fixed_cross_domain_best_score_by_memory_domain"
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")

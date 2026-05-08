@@ -19,6 +19,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+DATA_TEXT_SIZE = 14
+AXIS_TEXT_SIZE = 20
+AXIS_NAME_TEXT_SIZE = 24
+TITLE_TEXT_SIZE = 26
+SCALE_TEXT_SIZE = 24
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -63,11 +69,11 @@ DOMAIN_ORDER = [
 plt.rcParams.update(
     {
         "font.family": "DejaVu Sans",
-        "font.size": 10,
-        "axes.titlesize": 13,
-        "axes.labelsize": 11,
-        "xtick.labelsize": 9,
-        "ytick.labelsize": 9,
+        "font.size": AXIS_TEXT_SIZE,
+        "axes.titlesize": TITLE_TEXT_SIZE,
+        "axes.labelsize": AXIS_NAME_TEXT_SIZE,
+        "xtick.labelsize": AXIS_TEXT_SIZE,
+        "ytick.labelsize": AXIS_TEXT_SIZE,
         "figure.dpi": 160,
         "savefig.dpi": 300,
         "pdf.fonttype": 42,
@@ -281,7 +287,7 @@ def annotate_heatmap(ax, values: np.ndarray, counts: np.ndarray, *, fontsize: fl
                 ha="center",
                 va="center",
                 fontsize=fontsize,
-                fontweight="semibold",
+                fontweight="bold",
                 color="white" if value >= 3.6 else "#222222",
             )
 
@@ -307,13 +313,13 @@ def style_axis(
     title: str,
     show_x: bool = True,
     show_y: bool = True,
-    tick_size: float = 8,
+    tick_size: float = AXIS_TEXT_SIZE,
     include_averages: bool = False,
 ) -> None:
     labels = [domain_label(domain) for domain in domains]
     x_labels = list(reversed(labels)) + ["Average"] if include_averages else list(reversed(labels))
     y_labels = ["Average"] + labels if include_averages else labels
-    ax.set_title(title, fontsize=12.5, fontweight="semibold", pad=10)
+    ax.set_title(title, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", pad=14)
     ax.set_xticks(range(len(x_labels)))
     ax.set_xticklabels(x_labels if show_x else [], rotation=35, ha="right", rotation_mode="anchor")
     ax.set_yticks(range(len(y_labels)))
@@ -347,19 +353,20 @@ def save_single_heatmap(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plot_matrix, plot_counts = add_domain_averages(matrix, counts)
     plot_matrix, plot_counts = reverse_query_domain_columns(plot_matrix, plot_counts)
-    fig, ax = plt.subplots(figsize=(9.1, 8.0))
+    fig, ax = plt.subplots(figsize=(12.4, 10.8))
     cmap = plt.get_cmap("YlOrRd").copy()
     cmap.set_bad("#f0f0f0")
     image = ax.imshow(plot_matrix, cmap=cmap, vmin=0, vmax=5, aspect="equal")
     style_axis(ax, domains, title=title, include_averages=True)
-    ax.set_xlabel("Query domain", fontweight="semibold", labelpad=8)
-    ax.set_ylabel("Memory domain", fontweight="semibold", labelpad=8)
+    ax.set_xlabel("Query domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=8)
+    ax.set_ylabel("Memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=8)
     highlight_overall_average_cell(ax, plot_matrix)
-    annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=7.0)
+    annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=DATA_TEXT_SIZE)
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.025)
-    colorbar.set_label("Average Score", fontsize=10.5, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    fig.subplots_adjust(left=0.2, right=0.92, bottom=0.2, top=0.9)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
+    fig.subplots_adjust(left=0.22, right=0.92, bottom=0.28, top=0.86)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 
@@ -371,7 +378,7 @@ def save_2x2(
     title_suffix: str,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14.8, 11.6), constrained_layout=False)
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(23.5, 20.0), constrained_layout=False)
     cmap = plt.get_cmap("YlOrRd").copy()
     cmap.set_bad("#f0f0f0")
     image = None
@@ -389,22 +396,23 @@ def save_2x2(
                 title=MEMORY_STRUCTURES[method]["label"],
                 show_x=True,
                 show_y=True,
-                tick_size=5.8,
+                tick_size=AXIS_TEXT_SIZE,
                 include_averages=True,
             )
             ax.tick_params(axis="y", pad=1)
             ax.tick_params(axis="x", pad=1)
             highlight_overall_average_cell(ax, plot_matrix)
-            annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=5.1)
+            annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=DATA_TEXT_SIZE)
 
     colorbar_ax = fig.add_axes([0.865, 0.19, 0.018, 0.66])
     colorbar = fig.colorbar(image, cax=colorbar_ax)
-    colorbar.set_label("Average Score", fontsize=10.5, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    fig.supxlabel("Query domain", fontsize=12, fontweight="semibold", y=0.06)
-    fig.supylabel("Memory domain", fontsize=12, fontweight="semibold", x=0.075)
-    fig.suptitle(title_suffix, fontsize=14, fontweight="semibold", y=0.965)
-    fig.subplots_adjust(left=0.12, right=0.845, bottom=0.12, top=0.91, wspace=0.06, hspace=0.18)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
+    fig.supxlabel("Query domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", y=0.045)
+    fig.supylabel("Memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", x=0.065)
+    fig.suptitle(title_suffix, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", y=0.97)
+    fig.subplots_adjust(left=0.13, right=0.845, bottom=0.16, top=0.90, wspace=0.1, hspace=0.28)
     fig.savefig(output_path, bbox_inches="tight")
     plt.close(fig)
 

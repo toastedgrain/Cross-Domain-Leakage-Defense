@@ -11,13 +11,19 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+DATA_TEXT_SIZE = 14
+AXIS_TEXT_SIZE = 20
+AXIS_NAME_TEXT_SIZE = 24
+TITLE_TEXT_SIZE = 26
+SCALE_TEXT_SIZE = 24
+
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
-    "font.size": 10,
-    "axes.titlesize": 14,
-    "axes.labelsize": 12,
-    "xtick.labelsize": 11,
-    "ytick.labelsize": 11,
+    "font.size": AXIS_TEXT_SIZE,
+    "axes.titlesize": TITLE_TEXT_SIZE,
+    "axes.labelsize": AXIS_NAME_TEXT_SIZE,
+    "xtick.labelsize": AXIS_TEXT_SIZE,
+    "ytick.labelsize": AXIS_TEXT_SIZE,
     "figure.dpi": 160,
     "savefig.dpi": 300,
     "pdf.fonttype": 42,
@@ -225,7 +231,7 @@ def format_cell(value: float) -> str:
 
 
 def style_heatmap_axis(ax, title: str) -> None:
-    ax.set_title(title, fontsize=13, fontweight="semibold", pad=10, color="#222222")
+    ax.set_title(title, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", pad=14, color="#222222")
     ax.set_xticks(range(len(DEFENCES)))
     ax.set_xticklabels(
         DEFENCES,
@@ -258,14 +264,14 @@ def annotate_heatmap(ax, matrix: np.ndarray) -> None:
                 format_cell(value),
                 ha="center",
                 va="center",
-                fontsize=9.3,
-                fontweight="semibold",
+                fontsize=DATA_TEXT_SIZE,
+                fontweight="bold",
                 color=color,
             )
 
 
 def draw_metric(metric_key: str, metric_label: str) -> None:
-    fig = plt.figure(figsize=(14.2, 5.9))
+    fig = plt.figure(figsize=(18.2, 7.7))
     gridspec = fig.add_gridspec(
         nrows=1,
         ncols=6,
@@ -296,7 +302,7 @@ def draw_metric(metric_key: str, metric_label: str) -> None:
                 "→",
                 ha="center",
                 va="center",
-                fontsize=26,
+                fontsize=TITLE_TEXT_SIZE + 5,
                 fontweight="semibold",
                 color="#444444",
                 transform=arrow_ax.transAxes,
@@ -304,18 +310,18 @@ def draw_metric(metric_key: str, metric_label: str) -> None:
 
     cax = fig.add_subplot(gridspec[0, 5])
     colorbar = fig.colorbar(image, cax=cax)
-    colorbar.set_label("Failure rate (%)", fontsize=11, fontweight="semibold")
+    colorbar.set_label("Failure rate (%)", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 20, 40, 60, 80, 100])
-    colorbar.ax.tick_params(labelsize=10, length=3)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
 
     fig.suptitle(
         metric_label,
-        fontsize=16,
+        fontsize=TITLE_TEXT_SIZE,
         fontweight="semibold",
         y=0.98,
         color="#222222",
     )
-    fig.subplots_adjust(left=0.095, right=0.94, bottom=0.19, top=0.86)
+    fig.subplots_adjust(left=0.12, right=0.94, bottom=0.28, top=0.82)
 
     stem = f"{filename_safe(metric_label)}_failure_rate_heat_map"
     fig.savefig(OUTDIR / f"{stem}.png", bbox_inches="tight")

@@ -4,13 +4,19 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
 
+DATA_TEXT_SIZE = 18
+AXIS_TEXT_SIZE = 15
+AXIS_NAME_TEXT_SIZE = 18
+TITLE_TEXT_SIZE = 21
+SCALE_TEXT_SIZE = 15
+
 plt.rcParams.update({
     'font.family': 'DejaVu Sans',
-    'font.size': 10,
-    'axes.titlesize': 9.5,
-    'axes.labelsize': 14.5,
-    'xtick.labelsize': 14.5,
-    'ytick.labelsize': 14.5,
+    'font.size': AXIS_TEXT_SIZE,
+    'axes.titlesize': TITLE_TEXT_SIZE,
+    'axes.labelsize': AXIS_NAME_TEXT_SIZE,
+    'xtick.labelsize': AXIS_TEXT_SIZE,
+    'ytick.labelsize': AXIS_TEXT_SIZE,
     'figure.dpi': 160,
     'savefig.dpi': 300,
     'pdf.fonttype': 42,
@@ -22,7 +28,7 @@ OUTDIR.mkdir(exist_ok=True)
 
 # Fixed method order
 method_keys = ['Flat Memory List', 'Fixed Partitions', 'Dynamic Partitions', '2-Level Tree']
-method_labels = ['List', 'Fixed partitions', 'Dynamic partitions', 'Tree']
+method_labels = ['List', 'Fixed', 'Dynamic', 'Tree']
 
 # Polished color set
 method_colors = ['#4C78A8', '#F58518', '#54A24B', '#E45756']
@@ -168,14 +174,14 @@ for model, vals in DATA.items():
     ymin = min(ys) - 3
     ymax = max(ys) + 3
 
-    draw_points(ax, xs, ys, point_size=48, label_fontsize=7.8, label_offset=0.30)
+    draw_points(ax, xs, ys, point_size=48, label_fontsize=DATA_TEXT_SIZE, label_offset=0.30)
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
 
-    ax.set_xlabel('Beneficial-memory failure (%)', fontsize=10, labelpad=5)
-    ax.set_ylabel('Cross-domain leakage (%)', fontsize=10, labelpad=5)
-    ax.set_title(model, fontsize=9.2, fontweight='semibold', pad=5, color='#222222')
+    ax.set_xlabel('Beneficial-memory failure (%)', fontsize=AXIS_NAME_TEXT_SIZE, labelpad=5)
+    ax.set_ylabel('Cross-domain leakage (%)', fontsize=AXIS_NAME_TEXT_SIZE, labelpad=5)
+    ax.set_title(model, fontsize=TITLE_TEXT_SIZE, fontweight='semibold', pad=5, color='#222222')
 
     style_axis(ax)
 
@@ -202,25 +208,25 @@ for ax, model in zip(axes, models_subset):
     ymax = max(ys) + 3
 
     if model == "DeepSeek V3.2":
-        draw_points(ax, xs, ys, point_size=25, label_fontsize=12, label_offset=0.3,
+        draw_points(ax, xs, ys, point_size=25, label_fontsize=DATA_TEXT_SIZE, label_offset=0.3,
             label_sides=['right', 'left', 'right', 'bottom_right'])
     elif model == "GLM-4.7":
-        draw_points(ax, xs, ys, point_size=25, label_fontsize=12, label_offset=0.3,
+        draw_points(ax, xs, ys, point_size=25, label_fontsize=DATA_TEXT_SIZE, label_offset=0.3,
                 label_sides=['right', 'bottom_right', 'right', 'left'])
     elif model == "Qwen 3-235B":
-        draw_points(ax, xs, ys, point_size=25, label_fontsize=12, label_offset=0.3,
+        draw_points(ax, xs, ys, point_size=25, label_fontsize=DATA_TEXT_SIZE, label_offset=0.3,
                 label_sides=['right', 'right', 'left', 'left'])
     else:
-        draw_points(ax, xs, ys, point_size=25, label_fontsize=12, label_offset=0.3,
+        draw_points(ax, xs, ys, point_size=25, label_fontsize=DATA_TEXT_SIZE, label_offset=0.3,
                 label_sides=['right', 'right', 'right', 'right'])
     
 
     ax.set_xlim(xmin, xmax)
     ax.set_ylim(ymin, ymax)
 
-    ax.set_xlabel('Beneficial-memory failure (%)', fontsize=17.8, labelpad=4)
-    ax.set_ylabel('Cross-domain leakage (%)', fontsize=17.8, labelpad=4)
-    ax.set_title(model, fontsize=11.5, fontweight='semibold', pad=4, color='#222222')
+    ax.set_xlabel('Beneficial-memory failure (%)', fontsize=AXIS_NAME_TEXT_SIZE, labelpad=4)
+    ax.set_ylabel('Cross-domain leakage (%)', fontsize=AXIS_NAME_TEXT_SIZE, labelpad=4)
+    ax.set_title(model, fontsize=TITLE_TEXT_SIZE, fontweight='semibold', pad=4, color='#222222')
 
     style_axis(ax)
 
