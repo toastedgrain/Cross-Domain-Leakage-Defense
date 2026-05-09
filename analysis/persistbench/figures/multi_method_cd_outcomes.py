@@ -484,7 +484,7 @@ def print_counts(
             )
 
 
-def compute_average_counts(
+def compute_average_percentages(
     comparison_counts: dict[str, dict[str, dict[str, int]]],
     comparisons: list[ComparisonSpec],
 ) -> list[dict[str, float | int | str]]:
@@ -500,12 +500,17 @@ def compute_average_counts(
             "n_models": n_models,
         }
         for category in OUTCOME_CATEGORIES:
-            row[f"avg_{category}"] = round(
-                sum(counts[category] for counts in model_counts.values()) / n_models
+            percentages = [
+                counts[category] / total * 100.0
+                for counts in model_counts.values()
+                if (total := sum(counts.values())) > 0
+            ]
+            row[f"avg_{category}_pct"] = round(
+                sum(percentages) / len(percentages) if percentages else 0.0,
+                1,
             )
-        row["avg_total"] = round(
-            sum(sum(counts.values()) for counts in model_counts.values()) / n_models
-        )
+        has_samples = any(sum(counts.values()) > 0 for counts in model_counts.values())
+        row["avg_total_pct"] = 100.0 if has_samples else 0.0
         rows.append(row)
     return rows
 
@@ -536,7 +541,7 @@ def draw_average_figure(
         OUTCOME_LABELS,
         OUTCOME_COLORS,
     ):
-        values = np.array([float(row[f"avg_{category}"]) for row in rows])
+        values = np.array([float(row[f"avg_{category}_pct"]) for row in rows])
         ax.barh(
             y_positions,
             values,
@@ -548,11 +553,11 @@ def draw_average_figure(
             height=AVERAGE_BAR_HEIGHT,
         )
         for j, (value, left) in enumerate(zip(values, lefts)):
-            if value >= 3:
+            if value >= 2:
                 ax.text(
                     left + value / 2,
                     y_positions[j],
-                    f"{value:.0f}",
+                    f"{value:.0f}%",
                     ha="center",
                     va="center",
                     fontsize=AVERAGE_DATA_TEXT_SIZE,
@@ -563,7 +568,12 @@ def draw_average_figure(
 
     ax.set_yticks(y_positions)
     ax.set_yticklabels(labels, fontsize=AVERAGE_AXIS_TEXT_SIZE)
-    ax.set_xlabel("Average cross-domain samples", fontweight="semibold", labelpad=3)
+    ax.set_xlim(0, 100)
+    ax.set_xlabel(
+        "Average share of cross-domain samples (%)",
+        fontweight="semibold",
+        labelpad=3,
+    )
     ax.set_title(title, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", pad=4, color="#222222")
 
     ax.legend(
@@ -611,7 +621,7 @@ def write_average_outputs(
     output_stem: str,
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
-    rows = compute_average_counts(comparison_counts, comparisons)
+    rows = compute_average_percentages(comparison_counts, comparisons)
     csv_path = output_dir / f"{output_stem}_averages.csv"
     json_path = output_dir / f"{output_stem}_averages.json"
 
@@ -619,14 +629,14 @@ def write_average_outputs(
         "comparison",
         "label",
         "n_models",
-        "avg_both_pass",
-        "avg_first_pass_second_fail",
-        "avg_second_pass_first_fail",
-        "avg_both_fail",
-        "avg_total",
+        "avg_both_pass_pct",
+        "avg_first_pass_second_fail_pct",
+        "avg_second_pass_first_fail_pct",
+        "avg_both_fail_pct",
+        "avg_total_pct",
     ]
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames)
+        writer = csv.DictWriter(fh, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -639,11 +649,11 @@ def write_average_outputs(
     for row in rows:
         print(
             f"{row['label']:17s}  n={row['n_models']}  "
-            f"both_pass={row['avg_both_pass']:3d}  "
-            f"flat_pass_other_fail={row['avg_first_pass_second_fail']:3d}  "
-            f"other_pass_flat_fail={row['avg_second_pass_first_fail']:3d}  "
-            f"both_fail={row['avg_both_fail']:3d}  "
-            f"total={row['avg_total']:3d}"
+            f"both_pass={row['avg_both_pass_pct']:5.1f}%  "
+            f"flat_pass_other_fail={row['avg_first_pass_second_fail_pct']:5.1f}%  "
+            f"other_pass_flat_fail={row['avg_second_pass_first_fail_pct']:5.1f}%  "
+            f"both_fail={row['avg_both_fail_pct']:5.1f}%  "
+            f"total={row['avg_total_pct']:5.1f}%"
         )
     print(f"Averages saved to: {csv_path.resolve()}")
     print(f"Averages saved to: {json_path.resolve()}")

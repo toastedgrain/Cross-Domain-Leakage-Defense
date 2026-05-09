@@ -7,17 +7,18 @@ This sample-level overlap analysis shows that all structured memory methods
 recover cross-domain samples that fail under the Flat Memory List, so the
 improvement is not only visible in aggregate failure rates. Averaged over the
 seven evaluated models, dynamic partitions remain strongest overall, recovering
-the largest average number of Flat-failing samples while keeping shared failures
+the largest average share of Flat-failing samples while keeping shared failures
 below fixed partitions and the two-level tree. Compared with fixed partitions,
 dynamic partitions recover more samples where the Flat Memory List fails and
-also reduce the average number of samples where both methods fail.
+also reduce the average share of samples where both methods fail.
 
 \begin{figure}[t]
   \centering
   \includegraphics[width=\linewidth]{figures/flat_fixed_dynamic_tree_cd_overlap_averages.pdf}
   \caption{
   Average sample-level cross-domain outcome overlap between the Flat Memory List
-  and each structured memory method, averaged over the seven evaluated models.
+  and each structured memory method, shown as percentages averaged over the
+  seven evaluated models.
   Each horizontal bar compares the Flat Memory List against one method. Green
   denotes samples where both methods pass; blue denotes samples where the Flat
   Memory List passes but the comparison method fails; orange denotes samples
