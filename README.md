@@ -5,8 +5,7 @@
 This is a fork of [PersistBench](https://github.com/UKGovernmentBEIS/inspect_evals/tree/main/src/inspect_evals/persistbench) that extends the original cross-domain / sycophancy / beneficial-memory evaluation with:
 
 - **Memory normalization methods** – flat list (baseline), fixed partitions, dynamic / custom partitions, cosine-similarity partitions, RAG (top-k or threshold), and 2-level memory trees.
-- **Defensive system prompts** – permissive, restrictive, rubric-informed, GEPA-optimized, plus CIM-specific defense prompts.
-- **CIM dataset** – integrated CIMemories ("Contextual Integrity in Memory") evaluation alongside PersistBench, with persona-based labeling and the official violation/coverage metrics.
+- **Defensive system prompts** – permissive, restrictive, rubric-informed, and a GEPA-optimized variant.
 - **Azure AI Foundry provider** for Azure-hosted OpenAI-compatible deployments.
 - **Analysis & figure scripts** under [`analysis/persistbench/`](analysis/persistbench/) for failure-rate tables, score distributions, partition overlap, and the heat-maps / scatter plots used in the paper.
 - **A fine-tuning sweep** for the RAG cosine-similarity threshold.
@@ -22,21 +21,24 @@ The upstream feature set (checkpoint/resume, batch inference, multi-provider sup
 * [Repository Layout](#repository-layout)
 * [Quick Start](#quick-start)
 * [CLI](#cli)
-* [Datasets](#datasets)
+* [Input Format](#input-format)
 * [Memory Normalization](#memory-normalization)
 * [Defensive Prompts](#defensive-prompts)
 * [Config File](#config-file)
+* [Shipped Config Families](#shipped-config-families)
+* [Models](#models)
 * [Providers](#providers)
 * [Environment Variables](#environment-variables)
 * [Judge](#judge)
 * [Analysis & Figures](#analysis--figures)
 * [Strategy Comparison](#strategy-comparison)
 * [Fine-Tuning](#fine-tuning)
-* [CIM Workflow](#cim-workflow)
 * [Key Behaviors](#key-behaviors)
 * [Citation](#citation)
 
 ## Install
+
+Run from the repository root:
 
 ```bash
 uv sync && uv pip install -e .
@@ -49,35 +51,32 @@ Python 3.12+ is required. The fork pulls in additional dependencies (`matplotlib
 ```
 benchmark_samples/
   persistbench/{baseline,partitioned,partitioned_custom_categories,rag,tree}/   # input JSONLs per method (and per-model where relevant)
-  CIM/{baseline,partitioned,rag,tree,raw}/                                      # CIM inputs
 configs/
   persistbench/                                                                 # method × defense matrix
-  CIM/{baseline,defense,partitioned,partitioned_labeled,rag,tree}/
+  persistbench/fine_tuning/                                                     # RAG τ-sweep configs
 outputs/
   persistbench/{all_configs,baseline,defence,partitioned,...}/                  # checkpoint / result JSONs
-  CIM/{deepseekV3p2_labeled,llama3p3_labeled,...}/
 prompts/
   defensive/                                                                    # system-prompt defenses
   judges/                                                                       # judge prompts (cross_domain, sycophancy, beneficial)
-  evaluation_tree_informed.txt, generic_prompt.txt, cim_paper.txt, ...
+  evaluation_tree_informed.txt, generic_prompt.txt, ...
 src/benchmark/
-  eval_cli.py                                                                   # main CLI: run / generate / judge / cim-*
+  eval_cli.py                                                                   # main CLI: run / generate / judge
   providers/                                                                    # azure, openai, anthropic, gemini, openrouter, vertexai*, openai_compatible
-  memory_normalization/                                                         # partition / RAG / tree builders for PersistBench and CIM
-  dataset_loaders/                                                              # persistbench & cim loaders, cim_labeler
-  compare_persistbench_strategies.py, compare_cim_strategies.py                 # cross-strategy summary tables
+  memory_normalization/persistbench/                                            # partition / RAG / tree builders
+  dataset_loaders/                                                              # persistbench loaders
+  compare_persistbench_strategies.py                                            # cross-strategy summary table
 analysis/
   persistbench/                                                                 # FR@K, score / FR distributions, partition diff tooling
   persistbench/figures/                                                         # plotting scripts and rendered PDFs/PNGs
-  cim/                                                                          # CIM HTML viewers
   fine_tuning/rag_fine_tuning.py                                                # cosine-similarity τ sweep
 ```
 
 ## Quick Start
 
-The cleanest end-to-end path uses the included PersistBench baseline samples and one of the all-models configs in [`configs/persistbench/`](configs/persistbench/).
+All commands below are run from the repository root. The cleanest end-to-end path uses the included PersistBench baseline samples and one of the all-models configs in [`configs/persistbench/`](configs/persistbench/).
 
-**1. Provide credentials.** At minimum, point the benchmark at a provider you have access to (see [Providers](#providers) and [Environment Variables](#environment-variables)). Most shipped configs target Vertex AI Model Garden and Azure AI Foundry; you may want to swap in your own model entry.
+**1. Provide credentials.** At minimum, point the benchmark at a provider you have access to (see [Providers](#providers) and [Environment Variables](#environment-variables)). The shipped configs target Vertex AI Model Garden and Azure AI Foundry; you may want to swap in your own model entry.
 
 **2. Sanity-check with a small run.**
 
@@ -102,21 +101,17 @@ The output file is written incrementally and doubles as a **checkpoint**. Re-run
 
 ## CLI
 
-Five subcommands; all PersistBench/CIM commands accept either a config or a checkpoint file (auto-detected).
+Three subcommands; all accept either a config or a checkpoint file (auto-detected). Run from the repo root:
 
 ```bash
 uv run benchmark run <file>               # Generation + judgment
 uv run benchmark generate <file>          # Generation only
 uv run benchmark judge <file>             # Judge existing generations only
-
-uv run benchmark cim-label                # Build persona labels for the CIMemories dataset
-uv run benchmark cim-metrics <file>       # Compute CIM violation / coverage from a checkpoint
-uv run benchmark cim-compare <labels_dir> # Compare CIM strategies (baseline / defense / partitioned)
 ```
 
 `benchmark judge` errors if any generations are still missing responses.
 
-### Common flags (run / generate / judge)
+### Common flags
 
 | Flag | Description |
 |------|-------------|
@@ -128,33 +123,12 @@ uv run benchmark cim-compare <labels_dir> # Compare CIM strategies (baseline / d
 | `--no-auto-rerun` | Disable automatic retry on failure |
 | `--store-raw-api-responses` | Save full provider API responses |
 | `--ignore-config-mismatch` | Bypass config-change validation on resume |
-| `--dataset {persistbench,cim}` | Select dataset (overrides config) |
-| `--cim-judge-variant {default,reveal_paper_compat,reveal_official}` | CIM judge metric variant |
 
-`cim-label`, `cim-metrics`, and `cim-compare` have their own flag sets — see `uv run benchmark <subcommand> --help`.
+See `uv run benchmark <subcommand> --help` for the full list.
 
-## Datasets
+## Input Format
 
-The fork supports two datasets, selected with the top-level `dataset` config field (or `--dataset`):
-
-- **`persistbench`** (default) — cross-domain, sycophancy, and beneficial-memory-usage failure types.
-- **`cim`** — CIMemories contextual-integrity evaluation.
-
-PersistBench samples are organized per method:
-
-| Method | Path |
-|--------|------|
-| Flat list (baseline) | [`benchmark_samples/persistbench/baseline/full_benchmark.jsonl`](benchmark_samples/persistbench/baseline/full_benchmark.jsonl) — combined 500 entries (200 cross-domain + 200 sycophancy + 100 beneficial). Per-failure-type files are alongside it. |
-| Fixed partitions | [`benchmark_samples/persistbench/partitioned/<model>/full_benchmark.jsonl`](benchmark_samples/persistbench/partitioned/) — one folder per partitioning model |
-| Dynamic / custom partitions | [`benchmark_samples/persistbench/partitioned_custom_categories/<model>/`](benchmark_samples/persistbench/partitioned_custom_categories/) |
-| RAG | [`benchmark_samples/persistbench/rag/`](benchmark_samples/persistbench/rag/) — `*_k{1,3,5,8}.jsonl` (top-k) and `*_tau{0.25..0.75}.jsonl` (threshold) |
-| 2-level tree | [`benchmark_samples/persistbench/tree/<model>/`](benchmark_samples/persistbench/tree/) |
-
-CIM samples live in [`benchmark_samples/CIM/`](benchmark_samples/CIM/) with the same baseline / partitioned / rag / tree split, plus the raw HuggingFace dump under `raw/`.
-
-### Input format (PersistBench)
-
-Each entry has `memories` (list of strings or category dict, depending on method) and `query` (string), plus an optional `failure_type` (`cross_domain`, `sycophancy`, or `beneficial_memory_usage` — defaults to `cross_domain`). Domain metadata (`memory_domain`, `query_domain`) is preserved end-to-end so analysis scripts can slice scores by domain.
+Each entry in a PersistBench JSONL has `memories` (list of strings or category dict, depending on method) and `query` (string), plus an optional `failure_type` (`cross_domain`, `sycophancy`, or `beneficial_memory_usage` — defaults to `cross_domain`). Domain metadata (`memory_domain`, `query_domain`) is preserved end-to-end so analysis scripts can slice scores by domain.
 
 ```json
 {
@@ -166,6 +140,16 @@ Each entry has `memories` (list of strings or category dict, depending on method
 }
 ```
 
+Inputs are organized per method:
+
+| Method | Path |
+|--------|------|
+| Flat list (baseline) | [`benchmark_samples/persistbench/baseline/full_benchmark.jsonl`](benchmark_samples/persistbench/baseline/full_benchmark.jsonl) — combined 500 entries (200 cross-domain + 200 sycophancy + 100 beneficial). Per-failure-type files are alongside it. |
+| Fixed partitions | [`benchmark_samples/persistbench/partitioned/<model>/full_benchmark.jsonl`](benchmark_samples/persistbench/partitioned/) — one folder per partitioning model |
+| Dynamic / custom partitions | [`benchmark_samples/persistbench/partitioned_custom_categories/<model>/`](benchmark_samples/persistbench/partitioned_custom_categories/) |
+| RAG | [`benchmark_samples/persistbench/rag/`](benchmark_samples/persistbench/rag/) — `*_k{1,3,5,8}.jsonl` (top-k) and `*_tau{0.25..0.75}.jsonl` (threshold) |
+| 2-level tree | [`benchmark_samples/persistbench/tree/<model>/`](benchmark_samples/persistbench/tree/) |
+
 Scoring conventions (used by the judge and analysis scripts):
 
 | Failure type | Score range | Interpretation |
@@ -176,18 +160,18 @@ Scoring conventions (used by the judge and analysis scripts):
 
 ## Memory Normalization
 
-Scripts under [`src/benchmark/memory_normalization/`](src/benchmark/memory_normalization/) build the alternative memory representations consumed by `method`-aware configs. They read the baseline JSONL and write per-model JSONLs under `benchmark_samples/persistbench/<method>/<sanitized_model_name>/full_benchmark.jsonl` (or the analogous CIM path). Each script checkpoints its output and is safe to interrupt.
+Scripts under [`src/benchmark/memory_normalization/persistbench/`](src/benchmark/memory_normalization/persistbench/) build the alternative memory representations consumed by `method`-aware configs. They read the baseline JSONL and write per-model JSONLs under `benchmark_samples/persistbench/<method>/<sanitized_model_name>/full_benchmark.jsonl`. Each script checkpoints its output and is safe to interrupt.
 
 | Method | Script | What it does |
 |--------|--------|--------------|
-| Fixed partitions | [`persistbench/partition_memories.py`](src/benchmark/memory_normalization/persistbench/partition_memories.py) | Sorts each entry's memories into 11 fixed categories using an LLM. Vertex AI version. |
-| Cosine-similarity partitions | [`persistbench/partition_memories_cos_similarity.py`](src/benchmark/memory_normalization/persistbench/partition_memories_cos_similarity.py) | Same 11 categories, but assigns memories by embedding cosine similarity (no LLM at sort time). |
-| Custom partitions | [`persistbench/partition_memories_custom_categories.py`](src/benchmark/memory_normalization/persistbench/partition_memories_custom_categories.py) | Allows the LLM to introduce up to 2 ad-hoc categories per entry. |
-| RAG (threshold) | [`persistbench/rag_persistbench_memories.py`](src/benchmark/memory_normalization/persistbench/rag_persistbench_memories.py) | Embeds memories + query, keeps memories with cosine similarity ≥ τ. Stores both `memories` (filtered) and `full_memories` (all) so the judge can still score against the full pool. |
-| 2-level tree | [`persistbench/tree_persistbench_memories.py`](src/benchmark/memory_normalization/persistbench/tree_persistbench_memories.py) | Builds a category → subcategory → memory tree per entry in two LLM calls (skeleton + placement). |
-| Azure variants | [`persistbench/azure_requests/`](src/benchmark/memory_normalization/persistbench/azure_requests/) | Same scripts but against Azure AI Foundry endpoints. |
+| Fixed partitions | [`partition_memories.py`](src/benchmark/memory_normalization/persistbench/partition_memories.py) | Sorts each entry's memories into 11 fixed categories using an LLM. Vertex AI version. |
+| Cosine-similarity partitions | [`partition_memories_cos_similarity.py`](src/benchmark/memory_normalization/persistbench/partition_memories_cos_similarity.py) | Same 11 categories, but assigns memories by embedding cosine similarity (no LLM at sort time). |
+| Custom (dynamic) partitions | [`partition_memories_custom_categories.py`](src/benchmark/memory_normalization/persistbench/partition_memories_custom_categories.py) | Allows the LLM to introduce up to 2 ad-hoc categories per entry. |
+| RAG (threshold) | [`rag_persistbench_memories.py`](src/benchmark/memory_normalization/persistbench/rag_persistbench_memories.py) | Embeds memories + query, keeps memories with cosine similarity ≥ τ. Stores both `memories` (filtered) and `full_memories` (all) so the judge can still score against the full pool. |
+| 2-level tree | [`tree_persistbench_memories.py`](src/benchmark/memory_normalization/persistbench/tree_persistbench_memories.py) | Builds a category → subcategory → memory tree per entry in two LLM calls (skeleton + placement). |
+| Azure variants | [`azure_requests/`](src/benchmark/memory_normalization/persistbench/azure_requests/) | Same scripts but against Azure AI Foundry endpoints. |
 
-Equivalent CIM versions live under [`memory_normalization/CIM/`](src/benchmark/memory_normalization/CIM/) (`cim_normalize.py`, `partition_cim_memories.py`, `rag_cim_memories.py`, `tree_cim_memories.py`), plus standalone HTML tree viewers ([`visualize_persistbench_tree.html`](src/benchmark/memory_normalization/persistbench/visualize_persistbench_tree.html), [`visualize_cim_tree.html`](src/benchmark/memory_normalization/CIM/visualize_cim_tree.html)).
+Standalone HTML tree viewer: [`visualize_persistbench_tree.html`](src/benchmark/memory_normalization/persistbench/visualize_persistbench_tree.html).
 
 Most builders take their model list and concurrency from constants at the top of the file rather than CLI args. RAG and tree builders accept a few flags — for example:
 
@@ -207,30 +191,28 @@ The fork ships several drop-in system prompts that simulate different "memory po
 | Restrictive | [`prompts/defensive/restrictive.txt`](prompts/defensive/restrictive.txt) | Tells the model to use memories cautiously. |
 | Rubric-informed | [`prompts/defensive/rubric_informed.txt`](prompts/defensive/rubric_informed.txt) | Hands the model the failure-mode rubric. |
 | GEPA-optimized | [`prompts/defensive/GEPA_optimized.txt`](prompts/defensive/GEPA_optimized.txt) | Output of a GEPA prompt-optimization pass. |
-| CIM defense (medium / high) | [`prompts/defensive/cim_defense_medium.txt`](prompts/defensive/cim_defense_medium.txt), [`prompts/defensive/cim_defense_high.txt`](prompts/defensive/cim_defense_high.txt) | CIM-specific contextual-integrity instructions. |
 | Tree-informed evaluation | [`prompts/evaluation_tree_informed.txt`](prompts/evaluation_tree_informed.txt) | Pairs with `method: "tree"` configs. |
 
-Templates require a `{memories}` placeholder (PersistBench) — `{model_name}` is optional. CIM uses [`prompts/cim_paper.txt`](prompts/cim_paper.txt) by default when `dataset: "cim"` and no override is supplied.
+Templates require a `{memories}` placeholder; `{model_name}` is optional.
 
 ## Config File
 
 | Field | Required | Default | Description |
 |-------|:--------:|---------|-------------|
-| `input` | yes | | Path to input JSON or JSONL |
-| `output` | yes | | Path to output / checkpoint file |
-| `models` | yes | | List of [model entries](#model-entry) |
-| `dataset` | | `PersistBench` | `persistbench` or `cim` |
+| `input` | yes (when no per-model `input`) | | Path to the input JSON or JSONL used by every model entry. |
+| `output` | yes | | Path to output / checkpoint file. |
+| `dataset` | | `persistbench` | Always `persistbench` in this fork. |
+| `models` | yes | | List of [model entries](#model-entry). |
 | `method` | | `null` | `null` (flat list), `partitioned`, `partitioned_labeled`, or `tree`. When set, each model entry must point to its own `input` file. |
-| `prompt_template` | | built-in (or `prompts/cim_paper.txt` for CIM) | Path to a system-prompt template |
-| `generations` | | per-category | Override generation count for all categories (default: 3 / 3 / 1 / 1 for cross-domain / sycophancy / beneficial / cim) |
-| `concurrency` | | 1 | Max parallel API calls |
-| `judge_concurrency` | | inherits | Override concurrency for the judge phase |
-| `judge_provider` | | `openrouter` | `vertexai`, `openrouter`, or `gemini` |
-| `judge_model` | | provider default | Override the judge model name |
-| `cim_judge_variant` | | `reveal_paper_compat` | `default`, `reveal_paper_compat`, or `reveal_official` |
-| `limit` | | all | Max entries to process |
-| `batch_poll_timeout_minutes` | | 25 | Batch job polling timeout |
-| `store_raw_api_responses` | | false | Persist full provider API responses |
+| `prompt_template` | | built-in | Path to a system-prompt template. |
+| `generations` | | per-category | Override generation count for all categories (default: 3 / 3 / 1 for cross-domain / sycophancy / beneficial). |
+| `concurrency` | | 1 | Max parallel API calls. |
+| `judge_concurrency` | | inherits | Override concurrency for the judge phase. |
+| `judge_provider` | | `openrouter` | `vertexai`, `openrouter`, or `gemini`. |
+| `judge_model` | | provider default | Override the judge model name. |
+| `limit` | | all | Max entries to process. |
+| `batch_poll_timeout_minutes` | | 25 | Batch job polling timeout. |
+| `store_raw_api_responses` | | false | Persist full provider API responses. |
 
 ### Model entry
 
@@ -240,9 +222,66 @@ Templates require a `{memories}` placeholder (PersistBench) — `{model_name}` i
 - **`api_params`** — Forwarded to the provider (temperature, max_output_tokens, location, thinking config, …).
 - **`base_url`** — Required for `azure` and `openai_compatible`.
 - **`api_key_env`** — Env var holding the API key (used by `azure`, defaults to `AZURE_OPENAI_API_KEY`; and by `openai_compatible`, defaults to `OPENAI_API_KEY`).
-- **`input`** — Per-model input JSONL. Required when the top-level config sets `method` to `partitioned`, `partitioned_labeled`, or `tree`. See the configs in [`configs/persistbench/`](configs/persistbench/) for the expected layout.
+- **`input`** — Per-model input JSONL. Required when the top-level config sets `method` to `partitioned`, `partitioned_labeled`, or `tree`. When the top-level `input` is set and the entry's per-model `input` is `""`, the top-level value is used.
 
-The shipped configs cover the full method × defense matrix (e.g. `config_partitioned_defence_rubric_informed.json`, `config_tree_informed_defence_gepa.json`, `config_rag_tau0.5.json`). Use them as templates rather than writing one from scratch.
+### Top-level vs. per-model input
+
+- A **top-level `input`** is used when every model reads the same file (flat-list baseline, RAG, cosine-similarity partitions, or any defense run on the baseline JSONL). Per-model `"input": ""` is the convention for "use the top-level path".
+- A **per-model `input`** is required when the inputs are themselves model-dependent — i.e. fixed partitions, dynamic/custom partitions, and 2-level trees, where a *partitioning* model produced the per-entry memory layout. In those configs, `method` is set and each entry points at `benchmark_samples/persistbench/<method>/<sanitized_model_name>/full_benchmark.jsonl`.
+
+### Adapting a config for a new model or provider
+
+Copy an existing config and add or replace a model entry. For example, to add an OpenRouter Claude run on top of the GEPA defense:
+
+```bash
+cp configs/persistbench/config_defence_gepa.json configs/persistbench/config_defence_gepa_claude.json
+```
+
+```jsonc
+// inside config_defence_gepa_claude.json -> "models"
+{
+  "name": "anthropic/claude-sonnet-4.5",
+  "provider": "openrouter",
+  "mode": "sequential",
+  "api_params": { "max_output_tokens": 1024 },
+  "input": ""
+}
+```
+
+For methods with per-model inputs (`partitioned`, `tree`), first run the matching builder under [`src/benchmark/memory_normalization/persistbench/`](src/benchmark/memory_normalization/persistbench/) so the per-model JSONL exists, then point the entry's `input` at it.
+
+## Shipped Config Families
+
+All live in [`configs/persistbench/`](configs/persistbench/) and share the same seven-model roster (see [Models](#models)).
+
+| Family | Files | Notes |
+|--------|-------|-------|
+| Baseline | [`config_baseline.json`](configs/persistbench/config_baseline.json) | Flat memory list, no defense. |
+| Defense (flat) | `config_defence_{permissive,restrictive,rubric_informed,gepa}.json` | Same baseline inputs with each defensive system prompt. |
+| Fixed partitioned | [`config_partitioned.json`](configs/persistbench/config_partitioned.json) | Per-model 11-category partitions. |
+| Partitioned cosine | [`config_partitioned_cos.json`](configs/persistbench/config_partitioned_cos.json) | Single shared input from cosine-similarity assignment. |
+| Dynamic / custom partitioned | [`config_partitioned_custom.json`](configs/persistbench/config_partitioned_custom.json) | Up to 2 ad-hoc categories per entry, per partitioning model. |
+| Partitioned + defense | `config_partitioned_defence_*.json`, `config_partitioned_cos_defence_*.json`, `config_partitioned_custom_defence_*.json` | Cross-product of partitioned variants and defense prompts. |
+| RAG threshold | `config_rag_tau{0.25,0.5,0.75}.json` | Cosine-similarity threshold filtering at τ. |
+| Tree-informed | [`config_tree_informed.json`](configs/persistbench/config_tree_informed.json) | 2-level tree inputs with [`prompts/evaluation_tree_informed.txt`](prompts/evaluation_tree_informed.txt). |
+| Tree-informed + defense | `config_tree_informed_defence_*.json` | Tree inputs combined with each defensive prompt. |
+| Fine-tuning | [`configs/persistbench/fine_tuning/`](configs/persistbench/fine_tuning/) | `qwen3_235b_cross_domain_tau{0.25..0.65}.json` for the RAG τ sweep. |
+
+## Models
+
+The seven models below are the roster used by every shipped PersistBench config. Locations and modes are taken from [`configs/persistbench/config_baseline.json`](configs/persistbench/config_baseline.json); the other configs reuse the same entries with method-specific `input` paths.
+
+| Display Name | Provider | Mode | Location | Notes |
+|--------------|----------|------|----------|-------|
+| `DeepSeek-V3.2` | `azure` | `sequential` | — | Azure AI Foundry deployment; uses `base_url` `https://algoverse-hakeem.services.ai.azure.com/openai/v1/`. |
+| `gpt-oss-120b` | `azure` | `sequential` | — | Same Azure AI Foundry endpoint. |
+| `xai/grok-4.1-fast-non-reasoning` | `vertexai` | `sequential` | `global` | Vertex AI Model Garden. |
+| `zai-org/glm-4.7-maas` | `vertexai` | `sequential` | `global` | Vertex AI Model Garden. |
+| `meta/llama-3.3-70b-instruct-maas` | `vertexai` | `sequential` | `us-central1` | Vertex AI Model Garden. |
+| `qwen/qwen3-235b-a22b-instruct-2507-maas` | `vertexai` | `sequential` | `global` | Vertex AI Model Garden. The tree config pins this entry to `us-south1` for capacity reasons. |
+| `google/gemini-3.1-pro-preview` | `vertexai` | `sequential` | `global` | Vertex AI Model Garden. |
+
+All Vertex AI entries set `api_params.max_output_tokens: 1024` in the shipped configs.
 
 ## Providers
 
@@ -290,11 +329,11 @@ The CLI also defaults `VERTEXAI_SERVICE_ACCOUNT_PATH` to `~/Downloads/VERTEXAI_S
 
 ## Judge
 
-The default judge model is `moonshotai/kimi-k2-thinking` (`moonshotai/kimi-k2-thinking-maas` on Vertex AI) at temperature 0. The judge provider can be set via `--judge-provider` (CLI), `judge_provider` (config), or the `JUDGE_PROVIDER` env var. `judge_model` in the config overrides the default model name. CIM uses three judge variants (`default`, `reveal_paper_compat`, `reveal_official`) selected via `cim_judge_variant` / `--cim-judge-variant`.
+The default judge model is `moonshotai/kimi-k2-thinking` (`moonshotai/kimi-k2-thinking-maas` on Vertex AI) at temperature 0. The judge provider can be set via `--judge-provider` (CLI), `judge_provider` (config), or the `JUDGE_PROVIDER` env var. `judge_model` in the config overrides the default model name.
 
 ## Analysis & Figures
 
-All analysis tools assume invocation from the repo root. Most read checkpoint JSON files written by `benchmark run` and emit either tables to stdout or figures next to the script.
+All analysis tools are run from the repository root. Most read checkpoint JSON files written by `benchmark run` and emit either tables to stdout or figures next to the script.
 
 ### Failure-rate tables
 
@@ -329,28 +368,49 @@ The console-script alias `failure-rates` (declared in [`pyproject.toml`](pyproje
 
 Plotting scripts under [`analysis/persistbench/figures/`](analysis/persistbench/figures/) produce the PDFs/PNGs used in the paper. Each script writes into a sibling directory of the same name and the rendered files are checked in for reference.
 
-| Script | Output dir | What it shows |
-|--------|------------|---------------|
-| [`fr_heat_map.py`](analysis/persistbench/figures/fr_heat_map.py) | [`fr_heat_maps/`](analysis/persistbench/figures/fr_heat_maps/) | FR@K heat-maps per failure-type and memory structure × defense. |
-| [`category_fill_heat_map.py`](analysis/persistbench/figures/category_fill_heat_map.py) | [`category_fill_heat_maps/`](analysis/persistbench/figures/category_fill_heat_maps/) | Memory distribution across the 11 fixed categories per partitioning model. |
-| [`cd_vs_beneficial.py`](analysis/persistbench/figures/cd_vs_beneficial.py) | [`cd_vs_beneficial_scatter_boxed_bold/`](analysis/persistbench/figures/cd_vs_beneficial_scatter_boxed_bold/) | CD-leakage vs. beneficial-failure scatter per model. |
-| [`flat_vs_fixed_partitions_cd_overlap.py`](analysis/persistbench/figures/flat_vs_fixed_partitions_cd_overlap.py), [`fixed_vs_dynamic_partitions_cd_overlap.py`](analysis/persistbench/figures/fixed_vs_dynamic_partitions_cd_overlap.py) | sibling dirs | Overlap of failing entries between memory structures. |
-| [`cross_domain_pair_domain_scores.py`](analysis/persistbench/figures/cross_domain_pair_domain_scores.py), [`cross_domain_memory_domain_scores.py`](analysis/persistbench/figures/cross_domain_memory_domain_scores.py), [`cross_domain_query_domain_scores.py`](analysis/persistbench/figures/cross_domain_query_domain_scores.py) | sibling dirs | Per-(memory, query) domain heat-maps. |
-| [`cross_domain_query_memory_relationship.py`](analysis/persistbench/figures/cross_domain_query_memory_relationship.py) | [`cross_domain_query_memory_relationship/`](analysis/persistbench/figures/cross_domain_query_memory_relationship/) | Relationship summary between memory domain and query domain failures. |
+#### Failure-rate heat maps
+
+[`fr_heat_map.py`](analysis/persistbench/figures/fr_heat_map.py) → [`fr_heat_maps/`](analysis/persistbench/figures/fr_heat_maps/). Per failure-type heat maps over the memory-structure × defense matrix:
+
+- [`cross_domain_leakage_failure_rate_heat_map.png`](analysis/persistbench/figures/fr_heat_maps/cross_domain_leakage_failure_rate_heat_map.png), [`sycophancy_failure_rate_heat_map.png`](analysis/persistbench/figures/fr_heat_maps/sycophancy_failure_rate_heat_map.png), [`beneficial_failure_rate_heat_map.png`](analysis/persistbench/figures/fr_heat_maps/beneficial_failure_rate_heat_map.png) — show how each (structure, defense) cell trades off across the three failure types.
+- [`flat_memory_list_failure_rate_heat_map.png`](analysis/persistbench/figures/fr_heat_maps/flat_memory_list_failure_rate_heat_map.png), [`partitions_failure_rate_heat_map.png`](analysis/persistbench/figures/fr_heat_maps/partitions_failure_rate_heat_map.png), [`dynamic_partitions_failure_rate_heat_map.png`](analysis/persistbench/figures/fr_heat_maps/dynamic_partitions_failure_rate_heat_map.png) — single-structure slices for direct defense comparison.
+
+#### Category fill heat map
+
+[`category_fill_heat_map.py`](analysis/persistbench/figures/category_fill_heat_map.py) → [`category_fill_heat_maps/memory_distribution_heat_map.png`](analysis/persistbench/figures/category_fill_heat_maps/memory_distribution_heat_map.png). Distribution of memories across the 11 fixed categories per partitioning model — useful for spotting models that collapse memories into one or two buckets.
+
+#### Cross-domain leakage vs. beneficial-failure scatter
+
+[`cd_vs_beneficial.py`](analysis/persistbench/figures/cd_vs_beneficial.py) → [`cd_vs_beneficial_scatter_boxed_bold/`](analysis/persistbench/figures/cd_vs_beneficial_scatter_boxed_bold/). Per-model scatter (one PNG per model plus a [`combined_preview_grid.png`](analysis/persistbench/figures/cd_vs_beneficial_scatter_boxed_bold/combined_preview_grid.png)) plotting cross-domain leakage rate against beneficial-memory failure rate; defenses that reduce leakage but hurt beneficial usage show up in the upper-left quadrant.
+
+#### Method-overlap on cross-domain failures
+
+The sample-level comparison of memory structures lives in [`multi_method_cd_outcomes/`](analysis/persistbench/figures/multi_method_cd_outcomes/) (figure: [`flat_fixed_dynamic_tree_cd_overlap_averages.png`](analysis/persistbench/figures/multi_method_cd_outcomes/flat_fixed_dynamic_tree_cd_overlap_averages.png), data: [`flat_fixed_dynamic_tree_cd_overlap_averages.json`](analysis/persistbench/figures/multi_method_cd_outcomes/flat_fixed_dynamic_tree_cd_overlap_averages.json)). Averaged across the seven models, the per-sample pass/fail outcomes split as:
+
+| Comparison | Both pass | Flat pass / other fail | Other pass / Flat fail | Both fail |
+|------------|:--------:|:---------------------:|:---------------------:|:--------:|
+| Flat Memory List vs. 2-Level Tree | 33.0% | 10.7% | 14.7% | 41.6% |
+| Flat Memory List vs. Dynamic | 34.2% | 9.5% | 18.1% | 38.1% |
+| Flat Memory List vs. Fixed | 32.9% | 10.9% | 16.7% | 39.5% |
+
+Among these comparisons, **dynamic partitions recover the largest average share of Flat-failing cross-domain samples** (18.1%) while keeping the both-fail rate (38.1%) below both fixed partitions (39.5%) and the two-level tree (41.6%). Pairwise overlap PDFs/PNGs for the flat-vs-fixed and fixed-vs-dynamic cuts are produced by [`flat_vs_fixed_partitions_cd_overlap.py`](analysis/persistbench/figures/flat_vs_fixed_partitions_cd_overlap.py) and [`fixed_vs_dynamic_partitions_cd_overlap.py`](analysis/persistbench/figures/fixed_vs_dynamic_partitions_cd_overlap.py), with rendered figures in [`flat_vs_fixed_partitions_cd_overlap/`](analysis/persistbench/figures/flat_vs_fixed_partitions_cd_overlap/) and [`fixed_vs_dynamic_partitions_cd_overlap/`](analysis/persistbench/figures/fixed_vs_dynamic_partitions_cd_overlap/).
+
+#### Per-domain heat maps
+
+[`cross_domain_pair_domain_scores.py`](analysis/persistbench/figures/cross_domain_pair_domain_scores.py), [`cross_domain_memory_domain_scores.py`](analysis/persistbench/figures/cross_domain_memory_domain_scores.py), [`cross_domain_query_domain_scores.py`](analysis/persistbench/figures/cross_domain_query_domain_scores.py) → sibling [`cross_domain_pair_domain_scores/`](analysis/persistbench/figures/cross_domain_pair_domain_scores/), [`cross_domain_memory_domain_scores/`](analysis/persistbench/figures/cross_domain_memory_domain_scores/), and [`cross_domain_query_domain_scores/`](analysis/persistbench/figures/cross_domain_query_domain_scores/) directories. Per-(memory, query) domain heat-maps with a per-model breakdown plus an `average/` aggregate, useful for locating domain pairs that consistently leak across models.
+
+#### Query-memory relationship heat map
+
+[`cross_domain_query_memory_relationship.py`](analysis/persistbench/figures/cross_domain_query_memory_relationship.py) → [`cross_domain_query_memory_relationship/`](analysis/persistbench/figures/cross_domain_query_memory_relationship/): row-share, count, and lift heat-maps plus a [`memory_query_domain_relationship_summary.md`](analysis/persistbench/figures/cross_domain_query_memory_relationship/memory_query_domain_relationship_summary.md) commentary on which memory domains drive which query-domain failures.
 
 Most figure scripts accept `--benchmark <baseline.jsonl>` and `--output-dir`; many also take `--k` for the FR@K threshold.
 
 ## Strategy Comparison
 
-Two scripts produce side-by-side strategy tables across the shipped checkpoints:
-
 ```bash
 # PersistBench: FR@K per (strategy, model, failure_type) for the strategies
 # enumerated at the top of the script.
 uv run python src/benchmark/compare_persistbench_strategies.py
-
-# CIM: violation / coverage per strategy, auto-discovered from a labels root.
-uv run benchmark cim-compare outputs/CIM/deepseekV3p2_labeled --per-persona
 ```
 
 `compare_persistbench_strategies.py` hard-codes the checkpoint paths it expects under `outputs/persistbench/`; if you only have a subset of runs the missing entries render as `--`.
@@ -367,26 +427,6 @@ uv run python analysis/fine_tuning/rag_fine_tuning.py --force     # re-run compl
 
 The matching configs are in [`configs/persistbench/fine_tuning/`](configs/persistbench/fine_tuning/).
 
-## CIM Workflow
-
-CIM ("Contextual Integrity in Memory") is integrated as a second dataset. The pipeline is:
-
-1. **Persona labels** — `benchmark cim-label` queries an LLM with each CIMemories attribute under the three Westin privacy personas (fundamentalist / pragmatic / unconcerned) and aggregates a `share` / `private` label per attribute.
-
-   ```bash
-   uv run benchmark cim-label                                    # default: DeepSeek-V3.2-3 via azure
-   uv run benchmark cim-label --provider gemini --model gemini-2.5-pro --concurrency 20
-   uv run benchmark cim-label --aggregate-only                   # re-aggregate from checkpoint
-   ```
-
-   Outputs go to `outputs/cim_labels.json` by default; checkpoints to `outputs/cim_labeling_checkpoint.json`.
-
-2. **Generation + judging** — `benchmark run configs/CIM/<strategy>/...json` (or `--dataset cim`). Memory normalization for CIM uses the scripts under [`memory_normalization/CIM/`](src/benchmark/memory_normalization/CIM/) (`cim_normalize.py` first, then `partition_*` / `rag_*` / `tree_*`).
-
-3. **Metrics** — `benchmark cim-metrics <checkpoint>` computes the official CIMemories violation and coverage metrics (multi-level worst-case / average-case aggregation). `benchmark cim-compare <labels_dir>` discovers strategies under `labels_dir/{baseline,defense,partitioned}/` (or `labels_dir/<generator>/{...}/`) and prints a side-by-side table.
-
-Static HTML viewers for inspection: [`analysis/cim/cim_viewer.html`](analysis/cim/cim_viewer.html), [`analysis/cim/cim_rates_analysis.html`](analysis/cim/cim_rates_analysis.html), and the raw-sample browser at [`benchmark_samples/CIM/raw/cim_raw_viewer.html`](benchmark_samples/CIM/raw/cim_raw_viewer.html).
-
 ## Key Behaviors
 
 - **Checkpoint/resume.** Progress is saved after every generation and judgment. Safe to Ctrl+C and resume by re-running.
@@ -395,6 +435,7 @@ Static HTML viewers for inspection: [`analysis/cim/cim_viewer.html`](analysis/ci
 - **Judge-only.** `benchmark judge <checkpoint>` evaluates all completed generations. Errors if any are missing responses.
 - **Config-mismatch protection.** Resuming a checkpoint with changed model config (api_params, provider, mode), judge model, or failure types errors by default. `--ignore-config-mismatch` overrides this — only remaining work runs with the new config; already-completed entries are kept as-is and the checkpoint metadata is overwritten.
 - **Removed models.** If you remove a model from the config and resume, its existing results stay in the checkpoint entries but the model is dropped from metadata.
+- **Raw API responses.** `--store-raw-api-responses` (or `store_raw_api_responses: true` in the config) persists full provider responses in the checkpoint for later inspection; off by default to keep output files small.
 
 ## Citation
 
