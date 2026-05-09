@@ -1,0 +1,4 @@
+comparison,label,n_models,avg_both_pass,avg_first_pass_second_fail,avg_second_pass_first_fail,avg_both_fail,avg_total
+flat_vs_tree,Flat Memory List vs. 2-Level Tree,7,66,21,29,83,200
+flat_vs_dynamic,Flat Memory List vs. Dynamic,7,68,19,36,76,200
+flat_vs_fixed,Flat Memory List vs. Fixed,7,66,22,33,79,200

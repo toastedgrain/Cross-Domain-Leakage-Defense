@@ -1,0 +1,32 @@
+[
+  {
+    "comparison": "flat_vs_tree",
+    "label": "Flat Memory List vs. 2-Level Tree",
+    "n_models": 7,
+    "avg_both_pass": 66,
+    "avg_first_pass_second_fail": 21,
+    "avg_second_pass_first_fail": 29,
+    "avg_both_fail": 83,
+    "avg_total": 200
+  },
+  {
+    "comparison": "flat_vs_dynamic",
+    "label": "Flat Memory List vs. Dynamic",
+    "n_models": 7,
+    "avg_both_pass": 68,
+    "avg_first_pass_second_fail": 19,
+    "avg_second_pass_first_fail": 36,
+    "avg_both_fail": 76,
+    "avg_total": 200
+  },
+  {
+    "comparison": "flat_vs_fixed",
+    "label": "Flat Memory List vs. Fixed",
+    "n_models": 7,
+    "avg_both_pass": 66,
+    "avg_first_pass_second_fail": 22,
+    "avg_second_pass_first_fail": 33,
+    "avg_both_fail": 79,
+    "avg_total": 200
+  }
+]
