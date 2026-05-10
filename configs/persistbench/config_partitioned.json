@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/partitioned/output_all_models_partitioned.json",
+  "output": "outputs/persistbench/partitioned/output_deepseek_v3p2_gpt_oss_120b_grok_4p1_fast_glm_4p7_partitioned.json",
   "dataset": "persistbench",
   "method": "partitioned",
   "judge_provider": "vertexai",

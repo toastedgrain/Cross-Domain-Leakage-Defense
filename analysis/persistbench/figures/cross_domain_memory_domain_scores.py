@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -21,83 +22,27 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from analysis.persistbench.output_manifest import (
+    CHECKPOINT_LABELS,
+    DEFAULT_BENCHMARK,
+    MEMORY_STRUCTURES,
+    MODEL_LABELS,
+    MODEL_ORDER,
+    OUTPUTS,
+    REPO_ROOT,
+)
+
 DATA_TEXT_SIZE = 22
 AXIS_TEXT_SIZE = 24
 AXIS_NAME_TEXT_SIZE = 24
 TITLE_TEXT_SIZE = 26
 SCALE_TEXT_SIZE = 24
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-OUTPUTS = REPO_ROOT / "outputs" / "persistbench"
-DEFAULT_BASELINE_DIR = OUTPUTS / "baseline"
-DEFAULT_ALL_CONFIGS_BASELINE = OUTPUTS / "all_configs" / "baseline"
-DEFAULT_ALL_CONFIGS_PARTITIONED = (
-    OUTPUTS
-    / "all_configs"
-    / "partitioned"
-    / "output_all_models_partitioned.json"
-)
-DEFAULT_PARTITIONED_DIR = OUTPUTS / "partitioned"
-DEFAULT_ALL_CONFIGS_PARTITIONED_COS = OUTPUTS / "all_configs" / "partitioned_cos"
-DEFAULT_PARTITIONED_COS_DIR = OUTPUTS / "partitioned_cos_similarity"
-DEFAULT_ALL_CONFIGS_PARTITIONED_CUSTOM = OUTPUTS / "all_configs" / "partitioned_custom"
-DEFAULT_PARTITIONED_CUSTOM_DIR = OUTPUTS / "partitioned_custom_categories"
-DEFAULT_ALL_CONFIGS_TREE = OUTPUTS / "all_configs" / "tree"
-DEFAULT_TREE_DIR = OUTPUTS / "tree"
-DEFAULT_BENCHMARK = (
-    REPO_ROOT
-    / "benchmark_samples"
-    / "persistbench"
-    / "baseline"
-    / "full_benchmark.jsonl"
-)
 OUTDIR = Path(__file__).resolve().parent / "cross_domain_memory_domain_scores"
-
-MEMORY_STRUCTURES = {
-    "flat_memory_list": {
-        "label": "Flat List",
-        "checkpoints": [
-            DEFAULT_ALL_CONFIGS_BASELINE / "output_all_models_baseline.json",
-            DEFAULT_BASELINE_DIR / "persist_full_gemini3_pro.json",
-            DEFAULT_BASELINE_DIR / "persist_full_llama3p3_70b_qwen3_235b.json",
-        ],
-    },
-    "partitions": {
-        "label": "Inference Fixed Partitions",
-        "checkpoints": [
-            DEFAULT_ALL_CONFIGS_PARTITIONED,
-            DEFAULT_PARTITIONED_DIR / "persist_partitioned_gemini3_pro.json",
-            DEFAULT_PARTITIONED_DIR
-            / "with_empty_categories"
-            / "cross_domain_partitioned_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-        ],
-    },
-    "cosine_similarity_partitions": {
-        "label": "Cosine Similarity Partitions",
-        "checkpoints": [
-            DEFAULT_ALL_CONFIGS_PARTITIONED_COS / "output_all_models_partitioned_cos.json",
-            DEFAULT_PARTITIONED_COS_DIR / "cross_domain_llama3p3_70b_qwen3_235b_cos_partitioned_with_empty.json",
-        ],
-    },
-    "dynamic_partitions": {
-        "label": "Inference Dynamic Partitions",
-        "checkpoints": [
-            DEFAULT_ALL_CONFIGS_PARTITIONED_CUSTOM / "output_all_models_partitioned_custom.json",
-            DEFAULT_PARTITIONED_CUSTOM_DIR / "persist_partitioned_custom_categories_gemini3_pro.json",
-            DEFAULT_PARTITIONED_CUSTOM_DIR
-            / "with_empty_categories"
-            / "cross_domain_partitioned_model_custom_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-        ],
-    },
-    "2_level_tree": {
-        "label": "2-Level Tree",
-        "checkpoints": [
-            DEFAULT_ALL_CONFIGS_TREE / "output_all_models_tree_informed.json",
-            DEFAULT_TREE_DIR / "output_persistbench_informed_tree_llama3p3_qwen3.json",
-            DEFAULT_TREE_DIR / "persist_informed_tree_gemini3_pro.json",
-        ],
-    },
-}
 
 TRANSITION_STRUCTURES = [
     "flat_memory_list",
@@ -114,54 +59,6 @@ GRID_STRUCTURES = [
     ["flat_memory_list", "partitions"],
     ["dynamic_partitions", "2_level_tree"],
 ]
-
-MODEL_LABELS = {
-    "DeepSeek-V3.2": "DeepSeek V3.2",
-    "gpt-oss-120b": "GPT-OSS 120B",
-    "google/gemini-3-pro-preview": "Gemini 3.1 Pro",
-    "google/gemini-3.1-pro-preview": "Gemini 3.1 Pro",
-    "Llama-3.3-70B-Instruct": "Llama 3.3-70B",
-    "meta/llama-3.3-70b-instruct-maas": "Llama 3.3-70B",
-    "qwen/qwen3-235b-a22b-instruct-2507-maas": "Qwen 3-235B",
-    "xai/grok-4.1-fast-non-reasoning": "Grok 4.1 Fast",
-    "zai-org/glm-4.7-maas": "GLM-4.7",
-}
-
-MODEL_ORDER = [
-    "Llama 3.3-70B",
-    "Qwen 3-235B",
-    "DeepSeek V3.2",
-    "GPT-OSS 120B",
-    "GLM-4.7",
-    "Grok 4.1 Fast",
-    "Gemini 3.1 Pro",
-]
-
-CHECKPOINT_LABELS = {
-    "output_all_models_baseline.json": "Flat Memory List",
-    "output_all_models_partitioned.json": "Inference Fixed Partitions",
-    "output_all_models_partitioned_cos.json": "Cosine Similarity Partitions",
-    "output_all_models_partitioned_custom.json": "Inference Dynamic Partitions",
-    "output_all_models_tree_informed.json": "2-Level Tree",
-    "persist_full_gemini3_pro.json": "Flat Memory List",
-    "persist_full_llama3p3_70b_qwen3_235b.json": "Flat Memory List",
-    "persist_partitioned_gemini3_pro.json": "Inference Fixed Partitions",
-    "cross_domain_llama3p3_70b_qwen3_235b_cos_partitioned_with_empty.json": (
-        "Cosine Similarity Partitions + empty"
-    ),
-    "persist_partitioned_custom_categories_gemini3_pro.json": "Inference Dynamic Partitions",
-    "cross_domain_partitioned_model_custom_with_empty_categories_llama3p3_70b_qwen3_235b.json": (
-        "Inference Dynamic Partitions + empty"
-    ),
-    "output_persistbench_informed_tree_llama3p3_qwen3.json": "2-Level Tree",
-    "persist_informed_tree_gemini3_pro.json": "2-Level Tree",
-    "cross_domain_partitioned_with_empty_categories_llama3p3_70b_qwen3_235b.json": (
-        "Inference Fixed Partitions + empty"
-    ),
-    "cross_domain_partition_informed_with_empty_categories_llama3p3_70b_qwen3_235b.json": (
-        "Inference Fixed Partitions informed + empty"
-    ),
-}
 
 DOMAIN_LABELS = {
     "Educational and Formative Experiences": "Education",
@@ -612,6 +509,34 @@ def draw_memory_structure(name: str, benchmark_path: Path, output_dir: Path) -> 
     )
 
 
+def _format_avg(scores: list[int]) -> str:
+    return "-" if not scores else f"{float(np.mean(scores)):.2f}"
+
+
+def print_structure(name: str, benchmark_path: Path) -> None:
+    """Console summary for a single memory structure: model × memory-domain table."""
+    config = MEMORY_STRUCTURES[name]
+    models, domains, scores = aggregate_scores(config["checkpoints"], benchmark_path)
+
+    print(f"\n{config['label']}")
+    print("=" * len(config["label"]))
+    print("Model\tMemory domain\tN\tAverage best judge score")
+    for model in models:
+        for domain in domains:
+            cell_scores = scores[model].get(domain, [])
+            print(f"{model}\t{domain}\t{len(cell_scores)}\t{_format_avg(cell_scores)}")
+
+    print("\nOverall by model")
+    print("Model\tN\tAverage best judge score")
+    for model in models:
+        all_scores = [
+            score
+            for domain_scores in scores[model].values()
+            for score in domain_scores
+        ]
+        print(f"{model}\t{len(all_scores)}\t{_format_avg(all_scores)}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -628,29 +553,47 @@ def main() -> None:
         "--structure",
         action="append",
         choices=sorted(MEMORY_STRUCTURES),
-        help="Memory structure plot to generate. Repeat for multiple. Default: all structures.",
+        help="Memory structure to use. Repeat for multiple. Default: all structures.",
     )
     parser.add_argument("--benchmark", type=Path, default=DEFAULT_BENCHMARK)
     parser.add_argument("--output-dir", type=Path, default=OUTDIR)
+    parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Skip writing PNG/PDF figures (still prints the console table).",
+    )
+    parser.add_argument(
+        "--no-print",
+        action="store_true",
+        help="Skip the console table (still writes figures).",
+    )
     args = parser.parse_args()
 
     if args.checkpoint:
-        draw_heatmap(
-            args.checkpoint,
-            args.benchmark,
-            args.output_dir,
-            title="Custom Checkpoints",
-            output_stem="custom_cross_domain_best_score_by_memory_domain",
-        )
-    else:
-        structures = args.structure or list(MEMORY_STRUCTURES)
+        if not args.no_figures:
+            draw_heatmap(
+                args.checkpoint,
+                args.benchmark,
+                args.output_dir,
+                title="Custom Checkpoints",
+                output_stem="custom_cross_domain_best_score_by_memory_domain",
+            )
+        return
+
+    structures = args.structure or list(MEMORY_STRUCTURES)
+
+    if not args.no_print:
+        for structure in structures:
+            print_structure(structure, args.benchmark)
+
+    if not args.no_figures:
         for structure in structures:
             draw_memory_structure(structure, args.benchmark, args.output_dir)
         if args.structure is None:
             draw_transition_figure(args.benchmark, args.output_dir)
             draw_four_method_grid(args.benchmark, args.output_dir)
             draw_cosine_vs_fixed_figure(args.benchmark, args.output_dir)
-    print(f"Figure saved to: {args.output_dir.resolve()}")
+        print(f"\nFigures saved to: {args.output_dir.resolve()}")
 
 
 if __name__ == "__main__":

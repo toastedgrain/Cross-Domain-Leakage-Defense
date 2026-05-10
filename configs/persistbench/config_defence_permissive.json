@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/defence/output_all_models_permissive.json",
+  "output": "outputs/persistbench/defence/output_llama3p3_70b_azure_qwen3_235b_permissive.json",
   "prompt_template": "prompts/defensive/permissive.txt",
   "dataset": "persistbench",
   "judge_provider": "vertexai",

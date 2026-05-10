@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -25,44 +26,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-OUTPUTS = REPO_ROOT / "outputs" / "persistbench"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-FLAT_CHECKPOINTS = [
-    OUTPUTS / "all_configs" / "baseline" / "output_all_models_baseline.json",
-    OUTPUTS / "baseline" / "persist_full_gemini3_pro.json",
-    OUTPUTS / "baseline" / "persist_full_llama3p3_70b_qwen3_235b.json",
-]
+from analysis.persistbench.output_manifest import (
+    BASELINE_CHECKPOINTS,
+    MODEL_LABELS,
+    MODEL_ORDER,
+    PARTITIONED_CHECKPOINTS,
+)
 
-PARTITIONS_CHECKPOINTS = [
-    OUTPUTS / "all_configs" / "partitioned" / "output_all_models_partitioned.json",
-    OUTPUTS / "partitioned" / "persist_partitioned_gemini3_pro.json",
-    OUTPUTS
-    / "partitioned"
-    / "with_empty_categories"
-    / "cross_domain_partitioned_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-]
-
-MODEL_LABELS = {
-    "DeepSeek-V3.2": "DeepSeek V3.2",
-    "gpt-oss-120b": "GPT-OSS 120B",
-    "google/gemini-3-pro-preview": "Gemini 3.1 Pro",
-    "google/gemini-3.1-pro-preview": "Gemini 3.1 Pro",
-    "Llama-3.3-70B-Instruct": "Llama 3.3-70B",
-    "meta/llama-3.3-70b-instruct-maas": "Llama 3.3-70B",
-    "qwen/qwen3-235b-a22b-instruct-2507-maas": "Qwen 3-235B",
-    "xai/grok-4.1-fast-non-reasoning": "Grok 4.1 Fast",
-    "zai-org/glm-4.7-maas": "GLM-4.7",
-}
-
-MODEL_ORDER = [
-    "Llama 3.3-70B",
-    "Qwen 3-235B",
-    "DeepSeek V3.2",
-    "GPT-OSS 120B",
-    "GLM-4.7",
-    "Grok 4.1 Fast",
-    "Gemini 3.1 Pro",
-]
+FLAT_CHECKPOINTS = list(BASELINE_CHECKPOINTS)
+PARTITIONS_CHECKPOINTS = list(PARTITIONED_CHECKPOINTS)
 
 OUTDIR = Path(__file__).resolve().parent / "flat_vs_fixed_partitions_cd_overlap"
 
@@ -262,6 +237,49 @@ def draw_figure(counts: dict[str, dict[str, int]], output_dir: Path) -> None:
     plt.close(fig)
 
 
+CATEGORIES = ["both_pass", "flat_pass_part_fail", "part_pass_flat_fail", "both_fail"]
+COL_HEADERS = ["Both Pass", "Flat✓ Part✗", "Part✓ Flat✗", "Both Fail"]
+
+
+def print_table(counts: dict[str, dict[str, int]], k: int, threshold: int) -> None:
+    models = sorted(counts, key=sort_key)
+    if not models:
+        print("No models found in either method.")
+        return
+
+    model_w = max(len(m) for m in models)
+    col_w = max(max(len(h) for h in COL_HEADERS), 5)
+    total_w = 5
+
+    header_model = f"{'Model':<{model_w}}"
+    header_cols = "  ".join(f"{h:^{col_w}}" for h in COL_HEADERS)
+    header_total = f"  {'Total':>{total_w}}"
+    sep = "-" * (model_w + 2 + len(header_cols) + len(header_total))
+
+    print("\nCross-domain overlap: Flat Memory List vs. Inference Fixed Partitions")
+    print(
+        f"Failure = max(first {k} scores) >= {threshold}  |  "
+        "only entries present in both methods\n"
+    )
+    print(f"{header_model}  {header_cols}{header_total}")
+    print(sep)
+
+    col_totals: dict[str, int] = dict.fromkeys(CATEGORIES, 0)
+    for model in models:
+        c = counts[model]
+        total = sum(c.values())
+        row_cols = "  ".join(f"{c[cat]:^{col_w}}" for cat in CATEGORIES)
+        print(f"{model:<{model_w}}  {row_cols}  {total:>{total_w}}")
+        for cat in CATEGORIES:
+            col_totals[cat] += c[cat]
+
+    print(sep)
+    grand_total = sum(col_totals.values())
+    totals_row = "  ".join(f"{col_totals[cat]:^{col_w}}" for cat in CATEGORIES)
+    print(f"{'Total':<{model_w}}  {totals_row}  {grand_total:>{total_w}}")
+    print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -274,25 +292,31 @@ def main() -> None:
         help="Score threshold for failure: max(scores[:k]) >= threshold (default 3)",
     )
     parser.add_argument("--output-dir", type=Path, default=OUTDIR)
+    parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Skip writing PNG/PDF figures (still prints the console table).",
+    )
+    parser.add_argument(
+        "--no-print",
+        action="store_true",
+        help="Skip the console table (still writes figures).",
+    )
     args = parser.parse_args()
 
     flat_data = load_cross_domain_scores(FLAT_CHECKPOINTS)
     part_data = load_cross_domain_scores(PARTITIONS_CHECKPOINTS)
 
-    counts = compute_overlap_counts(flat_data, part_data, k=args.k, threshold=args.threshold)
+    counts = compute_overlap_counts(
+        flat_data, part_data, k=args.k, threshold=args.threshold
+    )
 
-    for model in sorted(counts, key=sort_key):
-        c = counts[model]
-        total = sum(c.values())
-        print(
-            f"{model:20s}  both_pass={c['both_pass']:3d}  "
-            f"flat_pass_part_fail={c['flat_pass_part_fail']:3d}  "
-            f"part_pass_flat_fail={c['part_pass_flat_fail']:3d}  "
-            f"both_fail={c['both_fail']:3d}  total={total}"
-        )
+    if not args.no_print:
+        print_table(counts, k=args.k, threshold=args.threshold)
 
-    draw_figure(counts, args.output_dir)
-    print(f"\nFigure saved to: {args.output_dir.resolve()}")
+    if not args.no_figures:
+        draw_figure(counts, args.output_dir)
+        print(f"Figure saved to: {args.output_dir.resolve()}")
 
 
 if __name__ == "__main__":

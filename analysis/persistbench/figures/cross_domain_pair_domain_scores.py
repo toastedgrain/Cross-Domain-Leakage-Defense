@@ -417,26 +417,132 @@ def save_2x2(
     plt.close(fig)
 
 
+def _format_value(value: float) -> str:
+    if value != value:  # NaN check
+        return ""
+    return f"{value:.3f}"
+
+
+def print_method_rows(
+    *,
+    method: str,
+    model: str,
+    domains: list[str],
+    matrix: np.ndarray,
+    counts: np.ndarray,
+) -> None:
+    method_label = MEMORY_STRUCTURES[method]["label"]
+    plot_matrix, plot_counts = add_domain_averages(matrix, counts)
+    memory_domains = ["Average"] + [domain_label(domain) for domain in domains]
+    query_domains = [domain_label(domain) for domain in domains] + ["Average"]
+    for row_index, memory_domain in enumerate(memory_domains):
+        for col_index, query_domain in enumerate(query_domains):
+            count = int(plot_counts[row_index, col_index])
+            if count == 0:
+                continue
+            print(
+                "\t".join(
+                    [
+                        method_label,
+                        model,
+                        memory_domain,
+                        query_domain,
+                        str(count),
+                        _format_value(float(plot_matrix[row_index, col_index])),
+                    ]
+                )
+            )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--benchmark", type=Path, default=DEFAULT_BENCHMARK)
     parser.add_argument("--output-dir", type=Path, default=OUTDIR)
+    parser.add_argument(
+        "--method",
+        choices=METHODS,
+        action="append",
+        help="Restrict to one or more methods. Default: all methods.",
+    )
+    parser.add_argument(
+        "--model",
+        action="append",
+        help="Restrict to one or more model labels. Default: all models.",
+    )
+    parser.add_argument(
+        "--average-only",
+        action="store_true",
+        help="Only print the average-across-models rows in the console table.",
+    )
+    parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Skip writing PNG figures (still prints the console table).",
+    )
+    parser.add_argument(
+        "--no-print",
+        action="store_true",
+        help="Skip the console table (still writes figures).",
+    )
     args = parser.parse_args()
 
-    by_method = {
-        method: method_data(method, args.benchmark)
-        for method in METHODS
-    }
+    methods = args.method or METHODS
+
+    by_method = {method: method_data(method, args.benchmark) for method in methods}
 
     models = sorted(
         {model for _, method_models, _, _ in by_method.values() for model in method_models},
         key=sort_model,
     )
 
+    requested_models = set(args.model or [])
+    selected_models = [
+        model for model in models if not requested_models or model in requested_models
+    ]
+
+    if not args.no_print:
+        print(
+            "\t".join(
+                [
+                    "Method",
+                    "Model",
+                    "Memory Domain",
+                    "Query Domain",
+                    "Samples",
+                    "Average Best Judge Score",
+                ]
+            )
+        )
+        for method in methods:
+            domains, _, per_model, average = by_method[method]
+            if not args.average_only:
+                for model in selected_models:
+                    if model not in per_model:
+                        continue
+                    matrix, counts = per_model[model]
+                    print_method_rows(
+                        method=method,
+                        model=model,
+                        domains=domains,
+                        matrix=matrix,
+                        counts=counts,
+                    )
+            avg_matrix, avg_counts = average
+            print_method_rows(
+                method=method,
+                model="Average",
+                domains=domains,
+                matrix=avg_matrix,
+                counts=avg_counts,
+            )
+
+    if args.no_figures:
+        return
+
     for model in models:
         model_dir = args.output_dir / safe_name(model)
         model_grid_data: dict[str, tuple[list[str], np.ndarray, np.ndarray]] = {}
-        for method in METHODS:
+        for method in methods:
             domains, _, per_model, _ = by_method[method]
             matrix, counts = per_model.get(
                 model,
@@ -461,7 +567,7 @@ def main() -> None:
 
     average_dir = args.output_dir / "average"
     average_grid_data: dict[str, tuple[list[str], np.ndarray, np.ndarray]] = {}
-    for method in METHODS:
+    for method in methods:
         domains, _, _, average = by_method[method]
         matrix, counts = average
         average_grid_data[method] = (domains, matrix, counts)
@@ -478,7 +584,7 @@ def main() -> None:
         title_suffix="Average Across Models",
     )
 
-    print(f"Figures saved to: {args.output_dir.resolve()}")
+    print(f"\nFigures saved to: {args.output_dir.resolve()}")
 
 
 if __name__ == "__main__":

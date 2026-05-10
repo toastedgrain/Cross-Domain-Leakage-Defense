@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -25,47 +26,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-OUTPUTS = REPO_ROOT / "outputs" / "persistbench"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
-FIXED_CHECKPOINTS = [
-    OUTPUTS / "all_configs" / "partitioned" / "output_all_models_partitioned.json",
-    OUTPUTS / "partitioned" / "persist_partitioned_gemini3_pro.json",
-    OUTPUTS
-    / "partitioned"
-    / "with_empty_categories"
-    / "cross_domain_partitioned_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-]
+from analysis.persistbench.output_manifest import (
+    MODEL_LABELS,
+    MODEL_ORDER,
+    PARTITIONED_CHECKPOINTS,
+    PARTITIONED_CUSTOM_CHECKPOINTS,
+)
 
-DYNAMIC_CHECKPOINTS = [
-    OUTPUTS / "all_configs" / "partitioned_custom" / "output_all_models_partitioned_custom.json",
-    OUTPUTS / "partitioned_custom_categories" / "persist_partitioned_custom_categories_gemini3_pro.json",
-    OUTPUTS
-    / "partitioned_custom_categories"
-    / "with_empty_categories"
-    / "cross_domain_partitioned_model_custom_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-]
-
-MODEL_LABELS = {
-    "DeepSeek-V3.2": "DeepSeek V3.2",
-    "gpt-oss-120b": "GPT-OSS 120B",
-    "google/gemini-3-pro-preview": "Gemini 3.1 Pro",
-    "google/gemini-3.1-pro-preview": "Gemini 3.1 Pro",
-    "Llama-3.3-70B-Instruct": "Llama 3.3-70B",
-    "meta/llama-3.3-70b-instruct-maas": "Llama 3.3-70B",
-    "qwen/qwen3-235b-a22b-instruct-2507-maas": "Qwen 3-235B",
-    "xai/grok-4.1-fast-non-reasoning": "Grok 4.1 Fast",
-    "zai-org/glm-4.7-maas": "GLM-4.7",
-}
-
-MODEL_ORDER = [
-    "Llama 3.3-70B",
-    "Qwen 3-235B",
-    "DeepSeek V3.2",
-    "GPT-OSS 120B",
-    "GLM-4.7",
-    "Grok 4.1 Fast",
-    "Gemini 3.1 Pro",
-]
+FIXED_CHECKPOINTS = list(PARTITIONED_CHECKPOINTS)
+DYNAMIC_CHECKPOINTS = list(PARTITIONED_CUSTOM_CHECKPOINTS)
 
 OUTDIR = Path(__file__).resolve().parent / "fixed_vs_dynamic_partitions_cd_overlap"
 
@@ -259,6 +231,51 @@ def draw_figure(counts: dict[str, dict[str, int]], output_dir: Path) -> None:
     plt.close(fig)
 
 
+CATEGORIES = ["both_pass", "fixed_pass_dynamic_fail", "dynamic_pass_fixed_fail", "both_fail"]
+COL_HEADERS = ["Both Pass", "Fixed✓ Dyn✗", "Dyn✓ Fixed✗", "Both Fail"]
+
+
+def print_table(counts: dict[str, dict[str, int]], k: int, threshold: int) -> None:
+    models = sorted(counts, key=sort_key)
+    if not models:
+        print("No models found in either method.")
+        return
+
+    model_w = max(len(m) for m in models)
+    col_w = max(max(len(h) for h in COL_HEADERS), 5)
+    total_w = 5
+
+    header_model = f"{'Model':<{model_w}}"
+    header_cols = "  ".join(f"{h:^{col_w}}" for h in COL_HEADERS)
+    header_total = f"  {'Total':>{total_w}}"
+    sep = "-" * (model_w + 2 + len(header_cols) + len(header_total))
+
+    print(
+        "\nCross-domain overlap: Inference Fixed Partitions vs. Inference Dynamic Partitions"
+    )
+    print(
+        f"Failure = max(first {k} scores) >= {threshold}  |  "
+        "only entries present in both methods\n"
+    )
+    print(f"{header_model}  {header_cols}{header_total}")
+    print(sep)
+
+    col_totals: dict[str, int] = dict.fromkeys(CATEGORIES, 0)
+    for model in models:
+        c = counts[model]
+        total = sum(c.values())
+        row_cols = "  ".join(f"{c[cat]:^{col_w}}" for cat in CATEGORIES)
+        print(f"{model:<{model_w}}  {row_cols}  {total:>{total_w}}")
+        for cat in CATEGORIES:
+            col_totals[cat] += c[cat]
+
+    print(sep)
+    grand_total = sum(col_totals.values())
+    totals_row = "  ".join(f"{col_totals[cat]:^{col_w}}" for cat in CATEGORIES)
+    print(f"{'Total':<{model_w}}  {totals_row}  {grand_total:>{total_w}}")
+    print()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--k", type=int, default=3, help="K for FR@K failure check (default 3)")
@@ -269,25 +286,31 @@ def main() -> None:
         help="Score threshold: max(scores[:k]) >= threshold means failure (default 3)",
     )
     parser.add_argument("--output-dir", type=Path, default=OUTDIR)
+    parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Skip writing PNG/PDF figures (still prints the console table).",
+    )
+    parser.add_argument(
+        "--no-print",
+        action="store_true",
+        help="Skip the console table (still writes figures).",
+    )
     args = parser.parse_args()
 
     fixed_data = load_cross_domain_scores(FIXED_CHECKPOINTS)
     dynamic_data = load_cross_domain_scores(DYNAMIC_CHECKPOINTS)
 
-    counts = compute_overlap_counts(fixed_data, dynamic_data, k=args.k, threshold=args.threshold)
+    counts = compute_overlap_counts(
+        fixed_data, dynamic_data, k=args.k, threshold=args.threshold
+    )
 
-    for model in sorted(counts, key=sort_key):
-        c = counts[model]
-        total = sum(c.values())
-        print(
-            f"{model:20s}  both_pass={c['both_pass']:3d}  "
-            f"fixed_pass_dynamic_fail={c['fixed_pass_dynamic_fail']:3d}  "
-            f"dynamic_pass_fixed_fail={c['dynamic_pass_fixed_fail']:3d}  "
-            f"both_fail={c['both_fail']:3d}  total={total}"
-        )
+    if not args.no_print:
+        print_table(counts, k=args.k, threshold=args.threshold)
 
-    draw_figure(counts, args.output_dir)
-    print(f"\nFigure saved to: {args.output_dir.resolve()}")
+    if not args.no_figures:
+        draw_figure(counts, args.output_dir)
+        print(f"Figure saved to: {args.output_dir.resolve()}")
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import sys
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,7 +32,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-OUTPUTS = REPO_ROOT / "outputs" / "persistbench"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from analysis.persistbench.output_manifest import (
+    BASELINE_CHECKPOINTS,
+    MODEL_LABELS,
+    MODEL_ORDER,
+    PARTITIONED_CHECKPOINTS,
+    PARTITIONED_CUSTOM_CHECKPOINTS,
+    TREE_CHECKPOINTS,
+)
+
 OUTDIR = Path(__file__).resolve().parent / "multi_method_cd_outcomes"
 
 
@@ -56,52 +68,25 @@ METHODS: dict[str, MethodSpec] = {
         key="flat",
         label="Flat Memory List",
         short_label="Flat",
-        checkpoints=(
-            OUTPUTS / "all_configs" / "baseline" / "output_all_models_baseline.json",
-            OUTPUTS / "baseline" / "persist_full_gemini3_pro.json",
-            OUTPUTS / "baseline" / "persist_full_llama3p3_70b_qwen3_235b.json",
-        ),
+        checkpoints=BASELINE_CHECKPOINTS,
     ),
     "fixed": MethodSpec(
         key="fixed",
         label="Fixed",
         short_label="Fixed",
-        checkpoints=(
-            OUTPUTS / "all_configs" / "partitioned" / "output_all_models_partitioned.json",
-            OUTPUTS / "partitioned" / "persist_partitioned_gemini3_pro.json",
-            OUTPUTS
-            / "partitioned"
-            / "with_empty_categories"
-            / "cross_domain_partitioned_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-        ),
+        checkpoints=PARTITIONED_CHECKPOINTS,
     ),
     "dynamic": MethodSpec(
         key="dynamic",
         label="Dynamic",
         short_label="Dynamic",
-        checkpoints=(
-            OUTPUTS
-            / "all_configs"
-            / "partitioned_custom"
-            / "output_all_models_partitioned_custom.json",
-            OUTPUTS
-            / "partitioned_custom_categories"
-            / "persist_partitioned_custom_categories_gemini3_pro.json",
-            OUTPUTS
-            / "partitioned_custom_categories"
-            / "with_empty_categories"
-            / "cross_domain_partitioned_model_custom_with_empty_categories_llama3p3_70b_qwen3_235b.json",
-        ),
+        checkpoints=PARTITIONED_CUSTOM_CHECKPOINTS,
     ),
     "tree": MethodSpec(
         key="tree",
         label="2-Level Tree",
         short_label="Tree",
-        checkpoints=(
-            OUTPUTS / "all_configs" / "tree" / "output_all_models_tree_informed.json",
-            OUTPUTS / "tree" / "output_persistbench_informed_tree_llama3p3_qwen3.json",
-            OUTPUTS / "tree" / "persist_informed_tree_gemini3_pro.json",
-        ),
+        checkpoints=TREE_CHECKPOINTS,
     ),
 }
 
@@ -109,28 +94,6 @@ MAIN_COMPARISONS = [
     ComparisonSpec("flat_vs_tree", "flat", "tree", "Tree"),
     ComparisonSpec("flat_vs_dynamic", "flat", "dynamic", "Dynamic"),
     ComparisonSpec("flat_vs_fixed", "flat", "fixed", "Fixed"),
-]
-
-MODEL_LABELS = {
-    "DeepSeek-V3.2": "DeepSeek V3.2",
-    "gpt-oss-120b": "GPT-OSS 120B",
-    "google/gemini-3-pro-preview": "Gemini 3.1 Pro",
-    "google/gemini-3.1-pro-preview": "Gemini 3.1 Pro",
-    "Llama-3.3-70B-Instruct": "Llama 3.3-70B",
-    "meta/llama-3.3-70b-instruct-maas": "Llama 3.3-70B",
-    "qwen/qwen3-235b-a22b-instruct-2507-maas": "Qwen 3-235B",
-    "xai/grok-4.1-fast-non-reasoning": "Grok 4.1 Fast",
-    "zai-org/glm-4.7-maas": "GLM-4.7",
-}
-
-MODEL_ORDER = [
-    "Llama 3.3-70B",
-    "Qwen 3-235B",
-    "DeepSeek V3.2",
-    "GPT-OSS 120B",
-    "GLM-4.7",
-    "Grok 4.1 Fast",
-    "Gemini 3.1 Pro",
 ]
 
 OUTCOME_CATEGORIES = [

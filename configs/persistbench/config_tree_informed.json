@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/tree/output_all_models_tree_informed.json",
+  "output": "outputs/persistbench/tree/output_llama3p3_70b_azure_qwen3_235b_tree_informed.json",
   "dataset": "persistbench",
   "method": "tree",
   "prompt_template": "prompts/evaluation_tree_informed.txt",
