@@ -1,0 +1,7 @@
+deepseek: DeepSeek-V3.2
+gemini: google/gemini-3-pro-preview, google/gemini-3.1-pro-preview
+glm: zai-org/glm-4.7-maas
+gpt: gpt-oss-120b
+grok: xai/grok-4.1-fast-non-reasoning
+llama: Llama-3.3-70B-Instruct (Azure model name), meta/llama-3.3-70b-instruct-maas (VertexAI model name)
+qwen: qwen/qwen3-235b-a22b-instruct-2507-maas
