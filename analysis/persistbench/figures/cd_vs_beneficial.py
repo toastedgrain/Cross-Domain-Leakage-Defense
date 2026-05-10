@@ -23,8 +23,8 @@ plt.rcParams.update({
     'ps.fonttype': 42,
 })
 
-OUTDIR = Path('cd_vs_beneficial_scatter_boxed_bold')
-OUTDIR.mkdir(exist_ok=True)
+OUTDIR = Path(__file__).resolve().parent / 'cd_vs_beneficial_scatter_boxed_bold'
+OUTDIR.mkdir(parents=True, exist_ok=True)
 
 # Fixed method order
 method_keys = ['Flat Memory List', 'Fixed Partitions', 'Dynamic Partitions', '2-Level Tree']
@@ -187,7 +187,7 @@ for model, vals in DATA.items():
 
     fig.tight_layout()
     stem = f'{filename_safe(model)}_cd_vs_beneficial_scatter_boxed_bold'
-    # fig.savefig(OUTDIR / f'{stem}.pdf', bbox_inches='tight')
+    fig.savefig(OUTDIR / f'{stem}.pdf', bbox_inches='tight')
     fig.savefig(OUTDIR / f'{stem}.png', bbox_inches='tight')
     plt.close(fig)
 
@@ -231,7 +231,7 @@ for ax, model in zip(axes, models_subset):
     style_axis(ax)
 
 fig.tight_layout()
-# fig.savefig(OUTDIR / 'combined_preview_grid.pdf', bbox_inches='tight')
+fig.savefig(OUTDIR / 'combined_preview_grid.pdf', bbox_inches='tight')
 fig.savefig(OUTDIR / 'combined_preview_grid.png', bbox_inches='tight')
 plt.close(fig)
 

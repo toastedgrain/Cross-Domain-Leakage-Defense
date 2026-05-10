@@ -316,7 +316,7 @@ def draw_heatmap(
     fig.subplots_adjust(left=0.20, right=0.9, bottom=0.29, top=0.84)
 
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
-    # fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
+    fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -384,7 +384,7 @@ def draw_transition_figure(benchmark_path: Path, output_dir: Path) -> None:
 
     output_stem = "flat_to_dynamic_transition_cross_domain_best_score_by_memory_domain"
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
-    # fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
+    fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -438,7 +438,7 @@ def draw_four_method_grid(benchmark_path: Path, output_dir: Path) -> None:
 
     output_stem = "all_methods_2x2_cross_domain_best_score_by_memory_domain"
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
-    # fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
+    fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 
@@ -491,7 +491,7 @@ def draw_cosine_vs_fixed_figure(benchmark_path: Path, output_dir: Path) -> None:
 
     output_stem = "cosine_vs_inference_fixed_cross_domain_best_score_by_memory_domain"
     fig.savefig(output_dir / f"{output_stem}.png", bbox_inches="tight")
-    # fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
+    fig.savefig(output_dir / f"{output_stem}.pdf", bbox_inches="tight")
     plt.close(fig)
 
 

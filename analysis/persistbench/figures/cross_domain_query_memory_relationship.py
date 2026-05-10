@@ -246,6 +246,7 @@ def save_heatmap(
     colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
     fig.subplots_adjust(left=0.22, right=0.92, bottom=0.29, top=0.86)
     fig.savefig(output_path, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
 
 

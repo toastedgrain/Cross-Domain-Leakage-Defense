@@ -368,6 +368,7 @@ def save_single_heatmap(
     colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
     fig.subplots_adjust(left=0.22, right=0.92, bottom=0.28, top=0.86)
     fig.savefig(output_path, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
 
 
@@ -414,6 +415,7 @@ def save_2x2(
     fig.suptitle(title_suffix, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", y=0.97)
     fig.subplots_adjust(left=0.13, right=0.845, bottom=0.16, top=0.90, wspace=0.1, hspace=0.28)
     fig.savefig(output_path, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
 
 
@@ -477,7 +479,7 @@ def main() -> None:
     parser.add_argument(
         "--no-figures",
         action="store_true",
-        help="Skip writing PNG figures (still prints the console table).",
+        help="Skip writing PNG/PDF figures (still prints the console table).",
     )
     parser.add_argument(
         "--no-print",
