@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Command-line interface for benchmark tool."""
+"""Command-line interface for the PersistBench benchmark tool."""
 
 import argparse
 import asyncio
@@ -17,8 +17,6 @@ from benchmark.benchmark_runner import (
     cancel_batch_jobs,
     run_benchmark_with_retry,
 )
-from benchmark.metrics_cim import run_cim_metrics_cli
-from benchmark.compare_cim_strategies import run_compare_cli
 
 
 def _add_arguments(parser: argparse.ArgumentParser) -> None:
@@ -72,18 +70,8 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
         help="Store full raw provider API responses in output/checkpoint files. "
         "Defaults to off to reduce output size.",
     )
-    parser.add_argument(
-        "--dataset",
-        type=str,
-        default=None,
-        help="Dataset to evaluate: PersistBench or CIM (case-insensitive, default from config)",
-    )
-    parser.add_argument(
-        "--cim-judge-variant",
-        choices=["default", "reveal_paper_compat", "reveal_official"],
-        default=None,
-        help="CIM judge variant: 'default' (legacy), 'reveal_paper_compat' (REVEAL metric), or 'reveal_official' (official CIMemories REVEAL). Default: reveal_paper_compat",
-    )
+
+
 def _exit_code_for_subcommand(stats, *, subcommand: str) -> int:
     """Compute CLI exit code based on mode-specific completion criteria."""
     if subcommand == "generate":
@@ -113,20 +101,14 @@ async def _handle(args: argparse.Namespace) -> int:
         retry_enabled=args.auto_rerun,
         concurrency_override=args.concurrency,
         store_raw_api_responses=args.store_raw_api_responses,
-        dataset=args.dataset,
-        cim_judge_variant=args.cim_judge_variant,
     )
     return _exit_code_for_subcommand(stats, subcommand=subcommand)
 
 
 async def main_async() -> int:
-    """Main CLI interface for benchmark tool.
-
-    Returns:
-        Exit code (0 for success, non-zero for failures).
-    """
+    """Main CLI interface for the PersistBench benchmark tool."""
     parser = argparse.ArgumentParser(
-        description="Batch LLM Generation & Judge Evaluation Tool",
+        description="PersistBench batch LLM generation & judge evaluation tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
             Example usage:
@@ -167,146 +149,7 @@ async def main_async() -> int:
     )
     _add_arguments(judge_parser)
 
-    cim_label_parser = subparsers.add_parser(
-        "cim-label",
-        help="Generate persona-based labels for CIMemories dataset",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent("""
-            Generates share/private labels for CIMemories attributes using
-            Westin privacy personas (fundamentalist, pragmatic, unconcerned).
-
-            Example:
-              benchmark cim-label
-              benchmark cim-label --model DeepSeek-V3.2-3 --provider azure --concurrency 20
-              benchmark cim-label --limit 25
-              benchmark cim-label --aggregate-only
-        """),
-    )
-    cim_label_parser.add_argument(
-        "--model", default="DeepSeek-V3.2-3",
-        help="Model for labeling (default: DeepSeek-V3.2-3)",
-    )
-    cim_label_parser.add_argument(
-        "--provider", choices=["openrouter", "gemini", "vertexai_oss", "vertexai", "azure"], default="azure",
-        help="Provider for labeling model (default: azure)",
-    )
-    cim_label_parser.add_argument(
-        "--concurrency", type=int, default=10,
-        help="Concurrent API calls (default: 10)",
-    )
-    cim_label_parser.add_argument(
-        "--samples", type=int, default=10,
-        help="Samples per persona (default: 10)",
-    )
-    cim_label_parser.add_argument(
-        "--limit", type=int, default=None,
-        help="Limit labeling to the first N CIM groups/samples",
-    )
-    cim_label_parser.add_argument(
-        "--output", default="outputs/cim_labels.json",
-        help="Output labels file path",
-    )
-    cim_label_parser.add_argument(
-        "--checkpoint", default="outputs/cim_labeling_checkpoint.json",
-        help="Checkpoint file for resuming labeling",
-    )
-    cim_label_parser.add_argument(
-        "--dataset-id", default="facebook/CIMemories",
-        help="HuggingFace dataset ID",
-    )
-    cim_label_parser.add_argument(
-        "--aggregate-only", action="store_true",
-        help="Skip LLM calls, just aggregate existing checkpoint into labels",
-    )
-    cim_label_parser.add_argument(
-        "--temperature", type=float, default=0.7,
-        help="Temperature for labeling calls (default: 0.7)",
-    )
-
-    cim_metrics_parser = subparsers.add_parser(
-        "cim-metrics",
-        help="Compute aggregate CIM metrics (violation + coverage) from checkpoint",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent("""
-            Computes official CIMemories violation and coverage metrics from a
-            checkpoint/output JSON file.
-
-            Example:
-              benchmark cim-metrics output.json
-              benchmark cim-metrics output.json --model gpt-4o
-        """),
-    )
-    cim_metrics_parser.add_argument(
-        "file",
-        help="Checkpoint/output JSON file to compute metrics from",
-    )
-    cim_metrics_parser.add_argument(
-        "--model",
-        default=None,
-        help="Filter results to a specific model name",
-    )
-
-    cim_compare_parser = subparsers.add_parser(
-        "cim-compare",
-        help="Compare CIM metrics across strategies (baseline / defense / partitioned)",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent("""
-            Auto-discovers strategy checkpoints under the given labels root and
-            prints a side-by-side violation/coverage comparison table.
-
-            Expected layout (either works):
-              labels_dir/{baseline,defense,partitioned}/*.json
-              labels_dir/<generator>/{baseline,defense,partitioned}/*.json
-
-            Example:
-              benchmark cim-compare outputs/CIM/deepseekV3p2_labeled
-        """),
-    )
-    cim_compare_parser.add_argument(
-        "labels_dir",
-        help="Root dir containing baseline/, defense/, partitioned/ subfolders",
-    )
-    cim_compare_parser.add_argument(
-        "--per-persona",
-        action="store_true",
-        help="Also print per-persona violation and coverage tables",
-    )
-
     args = parser.parse_args()
-
-    if args.subcommand == "cim-metrics":
-        run_cim_metrics_cli(args.file, model_name=args.model)
-        return 0
-
-    if args.subcommand == "cim-compare":
-        return run_compare_cli(args.labels_dir, per_persona=args.per_persona)
-
-    if args.subcommand == "cim-label":
-        from pathlib import Path
-        from benchmark.dataset_loaders.cim_labeler import LabelingConfig, run_labeling, load_cim_groups, aggregate_labels, save_labels, _load_checkpoint
-
-        config = LabelingConfig(
-            dataset_id=args.dataset_id,
-            model_name=args.model,
-            provider=args.provider,
-            samples_per_persona=args.samples,
-            concurrency=args.concurrency,
-            temperature=args.temperature,
-            limit=args.limit,
-            checkpoint_path=Path(args.checkpoint),
-            output_path=Path(args.output),
-        )
-
-        if args.aggregate_only:
-            print("Aggregate-only mode: loading checkpoint and groups...")
-            groups = load_cim_groups(config.dataset_id, config.split)
-            checkpoint = _load_checkpoint(config.checkpoint_path)
-            labels = aggregate_labels(checkpoint, groups)
-            save_labels(labels, config.output_path, config)
-        else:
-            await run_labeling(config)
-        return 0
-
     return await _handle(args)
 
 

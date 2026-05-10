@@ -16,6 +16,7 @@ from benchmark.checkpoint import (
     save_checkpoint,
 )
 from benchmark.config import (
+    FAILURE_TYPE_CROSS_DOMAIN,
     BenchmarkConfig,
     ModelEntry,
     get_generations_for_failure_type,
@@ -84,22 +85,11 @@ def load_input_file(file_path: Path) -> list[InputEntry]:
     return entries
 
 
-def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> list[InputEntry]:
-    """Load, validate, and deduplicate entries from input file.
-
-    When ``dataset='cim'``, failure_type is not read from the file — all entries
-    are treated as CIM automatically. ``task`` and ``recipient`` fields are mapped
-    to ``cim_task`` and ``cim_recipient`` so the generation prompt builder can fill
-    them in correctly.
-
-    When ``dataset='persistbench'`` (or None), the existing failure_type validation
-    logic applies.
-    """
+def load_and_validate_entries(input_file: Path) -> list[InputEntry]:
+    """Load, validate, and deduplicate PersistBench entries from an input file."""
     raw_entries = load_input_file(input_file)
     input_entries: list[dict[str, Any]] = []
     seen_hashes: set[str] = set()
-
-    is_cim = dataset == "cim"
 
     for i, raw_entry in enumerate(raw_entries):
         if not isinstance(raw_entry, dict):
@@ -118,15 +108,10 @@ def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> l
         memories = _normalize_memories(raw_memories)
         hash_id = raw_entry.get("hash_id") or generate_hash_id(memories, query)
 
-        if is_cim:
-            failure_type = "cim"
-            if hash_id in seen_hashes:
-                continue
-        else:
-            failure_type = resolve_entry_configuration(raw_entry)
-            validate_failure_type(failure_type)
-            if hash_id in seen_hashes:
-                continue
+        failure_type = resolve_entry_configuration(raw_entry)
+        validate_failure_type(failure_type)
+        if hash_id in seen_hashes:
+            continue
 
         seen_hashes.add(hash_id)
         entry_data = {
@@ -148,14 +133,6 @@ def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> l
                 entry_data["categorized_memories"] = {
                     category: list(items) for category, items in raw_memories.items()
                 }
-        if is_cim:
-            for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
-                        "attribute_memory_map"):
-                if key in raw_entry:
-                    entry_data[key] = raw_entry[key]
-            # Prefer explicit cim_task/cim_recipient; fall back to task/recipient
-            entry_data["cim_task"] = raw_entry.get("cim_task") or raw_entry.get("task")
-            entry_data["cim_recipient"] = raw_entry.get("cim_recipient") or raw_entry.get("recipient")
         input_entries.append(entry_data)
 
     if not input_entries:
@@ -164,14 +141,8 @@ def load_and_validate_entries(input_file: Path, dataset: str | None = None) -> l
     return input_entries
 
 
-def samples_to_input_entries(
-    samples: Iterable[Any], dataset: str
-) -> list[InputEntry]:
-    """Convert dataset Samples to InputEntry dicts for the benchmark pipeline.
-
-    For PersistBench samples: preserves existing failure_type from metadata.
-    For CIM samples: sets failure_type to 'cim' and stores attribute lists.
-    """
+def samples_to_input_entries(samples: Iterable[Any]) -> list[InputEntry]:
+    """Convert PersistBench Samples to InputEntry dicts for the benchmark pipeline."""
     from benchmark.dataset_loaders import Sample
 
     entries: list[InputEntry] = []
@@ -182,16 +153,8 @@ def samples_to_input_entries(
             "query": sample.prompt,
             "hash_id": sample.sample_id,
             "original_index": i,
-            "failure_type": sample.metadata.get("failure_type", dataset),
+            "failure_type": sample.metadata.get("failure_type", FAILURE_TYPE_CROSS_DOMAIN),
         }
-        if dataset == "cim":
-            entry["required_attributes"] = sample.required_attributes
-            entry["forbidden_attributes"] = sample.forbidden_attributes
-            entry["cim_metadata"] = sample.metadata
-            if "cim_task" in sample.metadata:
-                entry["cim_task"] = sample.metadata["cim_task"]
-            if "cim_recipient" in sample.metadata:
-                entry["cim_recipient"] = sample.metadata["cim_recipient"]
         entries.append(entry)
     return entries
 
@@ -226,12 +189,6 @@ def _hydrate_checkpoint_entry(
         }
         if "full_memories" in entry:
             entry_data["full_memories"] = entry["full_memories"]
-        # Preserve CIM-specific fields so checkpoint resume keeps them
-        if resolved_leak == "cim":
-            for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
-                        "cim_task", "cim_recipient", "attribute_memory_map"):
-                if key in entry:
-                    entry_data[key] = entry[key]
         checkpoint["entries"][hash_id] = entry_data
         return
 
@@ -328,11 +285,6 @@ def extract_entries_from_checkpoint(checkpoint: Checkpoint) -> list[InputEntry]:
         }
         if "full_memories" in entry_data:
             entry["full_memories"] = entry_data["full_memories"]
-        # Restore CIM-specific fields persisted by _hydrate_checkpoint_entry
-        for key in ("required_attributes", "forbidden_attributes", "cim_metadata",
-                    "cim_task", "cim_recipient", "attribute_memory_map"):
-            if key in entry_data:
-                entry[key] = entry_data[key]
         entries.append(entry)
     return entries
 

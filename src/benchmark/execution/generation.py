@@ -28,11 +28,7 @@ from benchmark.config import (
 )
 from benchmark.exceptions import FatalBenchmarkError
 from benchmark.types import GenerationEntry
-from benchmark.prompts import (
-    build_cim_user_message,
-    build_generation_prompt,
-    is_cim_user_message_template,
-)
+from benchmark.prompts import build_generation_prompt
 from benchmark.provider_registry import PROVIDERS, get_batch_provider
 from benchmark.protocols import (
     BatchGenerateFn,
@@ -47,7 +43,7 @@ from benchmark.work_planner import InputEntry, WorkItem
 BATCH_REQUEST_DELIMITER = "__"
 PHASE_GENERATION = "generation"
 ERROR_EMPTY_RESPONSE = "Empty or whitespace-only response"
-PRINT_PROMPTS = False
+PRINT_PROMPTS = True
 
 __all__ = [
     "BATCH_REQUEST_DELIMITER",
@@ -309,8 +305,6 @@ async def _process_generation_task(
             task.hash_id,
             task.gen_idx,
             prompt_template,
-            cim_task=task.entry.get("cim_task"),
-            cim_recipient=task.entry.get("cim_recipient"),
         )
 
         if not store_raw_api_responses:
@@ -358,8 +352,6 @@ async def _generate_model_response(
     task_hash_id: str,
     gen_idx: int,
     prompt_template: str | None = None,
-    cim_task: str | None = None,
-    cim_recipient: str | None = None,
 ) -> tuple[str | None, dict[str, Any], str | None]:
     """Call generation function and handle errors."""
     try:
@@ -369,20 +361,7 @@ async def _generate_model_response(
             model_name=model.name,
             gen_idx=gen_idx,
         )
-        # CIM defense templates use {task}/{recipient} and should replace the
-        # user message (matching the paper's single-message architecture).
-        # In that case the system prompt is left empty.
-        if (
-            prompt_template
-            and cim_task
-            and cim_recipient
-            and is_cim_user_message_template(prompt_template)
-        ):
-            generation_prompt = ""
-            query = build_cim_user_message(
-                formatted_memories, cim_task, cim_recipient, prompt_template
-            )
-        elif prompt_template:
+        if prompt_template:
             generation_prompt = build_generation_prompt(
                 formatted_memories, model.name, prompt_template
             )
@@ -611,29 +590,15 @@ def _prepare_generation_batch_items(
             model_name=task.model.name,
             gen_idx=task.gen_idx,
         )
-        cim_task = task.entry.get("cim_task")
-        cim_recipient = task.entry.get("cim_recipient")
-
-        if (
-            prompt_template
-            and cim_task
-            and cim_recipient
-            and is_cim_user_message_template(prompt_template)
-        ):
-            generation_prompt = ""
-            user_message = build_cim_user_message(
-                formatted_memories, cim_task, cim_recipient, prompt_template
-            )
-        elif prompt_template:
+        if prompt_template:
             generation_prompt = build_generation_prompt(
                 formatted_memories, task.model.name, prompt_template
             )
-            user_message = task.entry["query"]
         else:
             generation_prompt = build_generation_prompt(
                 formatted_memories, task.model.name
             )
-            user_message = task.entry["query"]
+        user_message = task.entry["query"]
 
         single_item: BatchWorkItem = {
             "request_id": _make_request_id(task.hash_id, task.gen_idx),

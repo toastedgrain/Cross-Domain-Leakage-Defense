@@ -63,7 +63,7 @@ def run_dry_run(
     if config.generations is not None:
         gen_desc = f"{config.generations} generation(s) per entry (global override)"
     else:
-        gen_desc = "per-category defaults (cross_domain: 3, sycophancy: 3)"
+        gen_desc = "per-category defaults (cross_domain: 3, sycophancy: 3, beneficial: 1)"
     console.print(
         f"Found {len(valid_entries)} unique entries, {len(models)} model(s), "
         f"{gen_desc} = {total_generations} planned generations."

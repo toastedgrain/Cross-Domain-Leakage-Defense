@@ -198,9 +198,9 @@ async def main() -> None:
         return
 
     # ── Flatten memories with per-row offsets ────────────────────────────────
-    # PersistBench rows each have their own memory pool (unlike CIM, where many
-    # rows share a persona's pool), so we flatten everything into one list for
-    # batched embedding, then slice back out per row.
+    # Each PersistBench row carries its own memory pool, so we flatten every
+    # row's memories into one list for batched embedding, then slice the
+    # results back out per row.
     all_memories: list[str] = []
     offsets: list[tuple[int, int]] = []  # (start, end) into all_memories per row
     for row in rows:
