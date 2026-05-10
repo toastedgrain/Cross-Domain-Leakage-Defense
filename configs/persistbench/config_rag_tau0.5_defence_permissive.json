@@ -1,6 +1,7 @@
 {
   "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.5.jsonl",
-  "output": "outputs/persistbench/rag/output_all_models_rag_tau0.5.json",
+  "output": "outputs/persistbench/rag_defence/output_all_models_rag_tau0.5_permissive.json",
+  "prompt_template": "prompts/defensive/permissive.txt",
   "dataset": "persistbench",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",

@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.25.jsonl",
-  "output": "outputs/persistbench/rag/output_deepseek_v3p2_gpt_oss_120b_grok_4p1_fast_glm_4p7_rag_tau0.25.json",
+  "output": "outputs/persistbench/rag/output_all_models_rag_tau0.25.json",
   "dataset": "persistbench",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
@@ -8,14 +8,14 @@
   "models": [
     {
       "name": "DeepSeek-V3.2",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": ""
     },
     {
       "name": "gpt-oss-120b",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": ""
@@ -39,7 +39,8 @@
         "max_output_tokens": 1024
       },
       "input": ""
-    },{
+    },
+    {
       "name": "meta/llama-3.3-70b-instruct-maas",
       "provider": "vertexai",
       "mode": "sequential",

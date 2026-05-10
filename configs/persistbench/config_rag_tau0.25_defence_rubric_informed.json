@@ -1,6 +1,7 @@
 {
-  "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.5.jsonl",
-  "output": "outputs/persistbench/rag/output_all_models_rag_tau0.5.json",
+  "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.25.jsonl",
+  "output": "outputs/persistbench/rag_defence/output_all_models_rag_tau0.25_rubric_informed.json",
+  "prompt_template": "prompts/defensive/rubric_informed.txt",
   "dataset": "persistbench",
   "judge_provider": "vertexai",
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
@@ -48,17 +49,17 @@
         "location": "us-central1",
         "max_output_tokens": 1024
       },
-      "input": ""
+      "input": "benchmark_samples/persistbench/tree/llama3p3_70b/cross_domain_and_beneficial_tree_llama3p3.jsonl"
     },
     {
       "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
       "provider": "vertexai",
       "mode": "sequential",
       "api_params": {
-        "location": "global",
+        "location": "us-south1",
         "max_output_tokens": 1024
       },
-      "input": ""
+      "input": "benchmark_samples/persistbench/tree/qwen3_235b/cross_domain_and_beneficial_tree_qwen3.jsonl"
     },
     {
       "name": "google/gemini-3.1-pro-preview",

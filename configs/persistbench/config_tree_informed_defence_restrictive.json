@@ -10,14 +10,14 @@
   "models": [
     {
       "name": "DeepSeek-V3.2",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/tree/DeepSeek-V3.2/full_benchmark.jsonl"
     },
     {
       "name": "gpt-oss-120b",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/tree/gpt-oss-120b/full_benchmark.jsonl"

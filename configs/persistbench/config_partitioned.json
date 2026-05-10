@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/partitioned/output_deepseek_v3p2_gpt_oss_120b_grok_4p1_fast_glm_4p7_partitioned.json",
+  "output": "outputs/persistbench/partitioned/output_all_models_partitioned.json",
   "dataset": "persistbench",
   "method": "partitioned",
   "judge_provider": "vertexai",
@@ -9,14 +9,14 @@
   "models": [
     {
       "name": "DeepSeek-V3.2",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/partitioned/DeepSeek-V3.2/full_benchmark.jsonl"
     },
     {
       "name": "gpt-oss-120b",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/partitioned/gpt-oss-120b/full_benchmark.jsonl"
