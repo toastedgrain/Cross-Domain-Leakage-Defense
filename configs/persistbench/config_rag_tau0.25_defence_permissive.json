@@ -56,7 +56,7 @@
       "provider": "vertexai",
       "mode": "sequential",
       "api_params": {
-        "location": "us-south1",
+        "location": "global",
         "max_output_tokens": 1024
       },
       "input": ""

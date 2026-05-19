@@ -57,7 +57,7 @@
       "provider": "vertexai",
       "mode": "sequential",
       "api_params": {
-        "location": "us-south1",
+        "location": "global",
         "max_output_tokens": 1024
       },
       "input": "benchmark_samples/persistbench/tree/qwen3_235b/full_benchmark.jsonl"
