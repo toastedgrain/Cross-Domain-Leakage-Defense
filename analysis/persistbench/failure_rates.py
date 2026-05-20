@@ -45,6 +45,13 @@ MODELS: dict[str, str] = {
     "google/gemini-3.1-pro-preview": "Gemini 3.1",
 }
 
+# Some model IDs appear under both their VertexAI and Azure names. Map the
+# alternate name to the canonical key in MODELS so both contribute to the
+# same logical row.
+MODEL_ALIASES: dict[str, str] = {
+    "Llama-3.3-70B-Instruct": "meta/llama-3.3-70b-instruct-maas",
+}
+
 # Methods Gemini was run on. For each, we list every file that contributes
 # (gemini file + matching llama/qwen file). Missing pairings show as "—".
 METHODS: dict[str, list[str]] = {
@@ -174,6 +181,7 @@ def load_method(
         for entry_id, entry in checkpoint.get("entries", {}).items():
             ft = normalize_ft(entry.get("failure_type") or entry.get("leakage_type"))
             for model, model_data in entry.get("results", {}).items():
+                model = MODEL_ALIASES.get(model, model)
                 if model not in MODELS:
                     continue
                 scores = [extract_score(g) for g in model_data.get("generations", [])]
@@ -204,7 +212,12 @@ def fr_at_k(
 
 
 def format_cell(value: float | None) -> str:
-    return " - " if value is None else f"{value:3.0f}"
+    if value is None:
+        return "-"
+    # Collapse 100.0 to "100" so cells stay 4 chars wide.
+    if value >= 99.95:
+        return "100"
+    return f"{value:.1f}"
 
 
 def main() -> None:
@@ -220,7 +233,7 @@ def main() -> None:
 
     # Build column header: per-model group of three failure-type subcolumns.
     label_w = max(len(name) for name in METHODS) + 1
-    cell_w = 3
+    cell_w = 4
     gap = " "
 
     def model_block(values: list[str]) -> str:
