@@ -7,12 +7,22 @@ import argparse
 import datetime as dt
 import json
 import pathlib
+import sys
 from typing import Any
 
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-OUTPUTS = REPO_ROOT / "outputs" / "persistbench" / "all_configs"
-SAMPLES = REPO_ROOT / "benchmark_samples" / "persistbench"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from analysis.persistbench.output_manifest import (
+    BASELINE_CHECKPOINTS,
+    PARTITIONED_CHECKPOINTS,
+    PARTITIONED_COS_CHECKPOINTS,
+    PARTITIONED_CUSTOM_CHECKPOINTS,
+    SAMPLES,
+    TREE_CHECKPOINTS,
+)
 
 MODELS: dict[str, dict[str, str]] = {
     "gpt-oss-120b": {
@@ -27,27 +37,27 @@ MODELS: dict[str, dict[str, str]] = {
 
 METHODS: dict[str, dict[str, Any]] = {
     "Baseline": {
-        "checkpoint": OUTPUTS / "baseline" / "output_all_models_baseline.json",
+        "checkpoint": BASELINE_CHECKPOINTS[0],
         "sample_path": None,
         "memory_format": "flat_list",
     },
     "Partitioned": {
-        "checkpoint": OUTPUTS / "partitioned" / "output_all_models_partitioned.json",
+        "checkpoint": PARTITIONED_CHECKPOINTS[0],
         "sample_path": lambda sample_dir: SAMPLES / "partitioned" / sample_dir / "full_benchmark.jsonl",
         "memory_format": "partitioned",
     },
     "Partitioned_COS": {
-        "checkpoint": OUTPUTS / "partitioned_cos" / "output_all_models_partitioned_cos.json",
+        "checkpoint": PARTITIONED_COS_CHECKPOINTS[0],
         "sample_path": lambda sample_dir: SAMPLES / "partitioned" / "cos_similarity" / "full_benchmark.jsonl",
         "memory_format": "partitioned_cos",
     },
     "Partitioned_Custom": {
-        "checkpoint": OUTPUTS / "partitioned_custom" / "output_all_models_partitioned_custom.json",
+        "checkpoint": PARTITIONED_CUSTOM_CHECKPOINTS[0],
         "sample_path": lambda sample_dir: SAMPLES / "partitioned_custom_categories" / sample_dir / "full_benchmark.jsonl",
         "memory_format": "partitioned_custom",
     },
     "Tree": {
-        "checkpoint": OUTPUTS / "tree" / "output_all_models_tree_informed.json",
+        "checkpoint": TREE_CHECKPOINTS[0],
         "sample_path": lambda sample_dir: SAMPLES / "tree" / sample_dir / "full_benchmark.jsonl",
         "memory_format": "tree",
     },

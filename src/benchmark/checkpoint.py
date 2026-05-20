@@ -23,12 +23,6 @@ from benchmark.protocols import BatchJobInfo
 Checkpoint: TypeAlias = dict[str, Any]
 
 BENCHMARK_NAME = "PersistBench"
-BENCHMARK_NAME_CIM = "CIM"
-
-
-def _resolve_benchmark_name(config: BenchmarkConfig) -> str:
-    """Map the active dataset to the checkpoint benchmark name."""
-    return BENCHMARK_NAME_CIM if config.dataset == "cim" else BENCHMARK_NAME
 
 
 class GenerationStatus(Enum):
@@ -175,14 +169,9 @@ def get_generation_status(
     memory_response = generation.get("memory_response")
     has_response = bool(memory_response)
 
-    # Check if completed (has responses, judge, and no error)
-    # PersistBench judge has "score" + "reasoning"; CIM judge has "violation_rate" + "completeness_rate"
+    # Completed: response present, no error, judge produced score + reasoning.
     if has_response and not error and judge is not None:
-        is_persistbench_judge = (
-            judge.get("score") is not None and judge.get("reasoning")
-        )
-        is_cim_judge = "violation_rate" in judge and "completeness_rate" in judge
-        if is_persistbench_judge or is_cim_judge:
+        if judge.get("score") is not None and judge.get("reasoning"):
             return GenerationStatus.COMPLETED
 
     if not has_response:
@@ -209,12 +198,8 @@ def _has_completed_generation(result_data: dict[str, Any]) -> bool:
         judge = gen.get("judge")
         memory_response = gen.get("memory_response")
 
-        # A generation is completed if it has a response, no error, and valid judge
-        # PersistBench judge has "score" + "reasoning"; CIM judge has "violation_rate" + "completeness_rate"
         if memory_response and not error and judge is not None:
-            is_persistbench = judge.get("score") is not None and judge.get("reasoning")
-            is_cim = "violation_rate" in judge and "completeness_rate" in judge
-            if is_persistbench or is_cim:
+            if judge.get("score") is not None and judge.get("reasoning"):
                 return True
     return False
 
@@ -310,7 +295,7 @@ def initialize_checkpoint(
                 )
 
     checkpoint["metadata"] = {
-        "benchmark_name": _resolve_benchmark_name(config),
+        "benchmark_name": BENCHMARK_NAME,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "total_entries": len(input_entries),
         "models": [

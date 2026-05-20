@@ -11,13 +11,19 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+DATA_TEXT_SIZE = 18
+AXIS_TEXT_SIZE = 22
+AXIS_NAME_TEXT_SIZE = 22
+TITLE_TEXT_SIZE = 24
+SCALE_TEXT_SIZE = 18
+
 plt.rcParams.update({
     "font.family": "DejaVu Sans",
-    "font.size": 10,
-    "axes.titlesize": 14,
-    "axes.labelsize": 12,
-    "xtick.labelsize": 11,
-    "ytick.labelsize": 11,
+    "font.size": AXIS_TEXT_SIZE,
+    "axes.titlesize": TITLE_TEXT_SIZE,
+    "axes.labelsize": AXIS_NAME_TEXT_SIZE,
+    "xtick.labelsize": AXIS_TEXT_SIZE,
+    "ytick.labelsize": AXIS_TEXT_SIZE,
     "figure.dpi": 160,
     "savefig.dpi": 300,
     "pdf.fonttype": 42,
@@ -197,8 +203,8 @@ def annotate_heatmap(ax, values: np.ndarray) -> None:
                 f"{value:.0f}",
                 ha="center",
                 va="center",
-                fontsize=8.5,
-                fontweight="semibold",
+                fontsize=DATA_TEXT_SIZE,
+                fontweight="bold",
                 color=color,
             )
 
@@ -206,24 +212,24 @@ def annotate_heatmap(ax, values: np.ndarray) -> None:
 def draw_heatmap() -> None:
     values = matrix()
 
-    fig, ax = plt.subplots(figsize=(13.6, 6.6))
+    fig, ax = plt.subplots(figsize=(17.4, 8.4))
     image = ax.imshow(values, cmap=plt.get_cmap("YlGnBu"), vmin=0, vmax=float(values.max()), aspect="auto")
 
     style_axis(ax)
     annotate_heatmap(ax, values)
 
     colorbar = fig.colorbar(image, ax=ax, fraction=0.035, pad=0.025)
-    colorbar.set_label("Memory items", fontsize=11, fontweight="semibold")
-    colorbar.ax.tick_params(labelsize=10, length=3)
+    colorbar.set_label("Memory items", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
 
     ax.set_title(
         "Memory Distribution of Inferance and Cosine Similarity Fixed Partitions",
-        fontsize=16,
+        fontsize=TITLE_TEXT_SIZE,
         fontweight="semibold",
         pad=14,
         color="#222222",
     )
-    fig.subplots_adjust(left=0.17, right=0.94, bottom=0.21, top=0.90)
+    fig.subplots_adjust(left=0.20, right=0.94, bottom=0.28, top=0.86)
 
     stem = "memory_distribution_heat_map"
     fig.savefig(OUTDIR / f"{stem}.png", bbox_inches="tight")

@@ -14,7 +14,7 @@
   "judge_model": "moonshotai/kimi-k2-thinking-maas",
   "judge_provider": "vertexai",
   "input": "benchmark_samples/persistbench/rag/persistbench_rag_cross_domain_tau0.45.jsonl",
-  "output": "outputs/persistbench/rag/fine_tuning/persist_rag_cross_domain_tau0.45_qwen3_235b.json",
+  "output": "outputs/persistbench/rag/fine_tuning/output_all_models_cross_domain_tau0.45.json",
   "concurrency": 50,
   "judge_concurrency": 20
 }

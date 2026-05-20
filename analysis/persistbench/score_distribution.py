@@ -154,6 +154,8 @@ def plot_distributions(
     fig.suptitle("Score Distribution by Failure Type and Model", fontsize=13, fontweight="bold")
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    if out_path.suffix.lower() != ".pdf":
+        plt.savefig(out_path.with_suffix(".pdf"), dpi=150, bbox_inches="tight")
     print(f"Plot saved to {out_path}")
 
 
@@ -161,7 +163,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Score distribution per model per failure type")
     parser.add_argument("files", nargs="+", type=pathlib.Path, help="Checkpoint JSON files")
     parser.add_argument("--plot", type=pathlib.Path, default=None, metavar="FILE",
-                        help="Save bar chart to this PNG path")
+                        help="Save bar chart to this path; non-PDF paths also get a matching PDF")
     args = parser.parse_args()
 
     data = load_data(args.files)

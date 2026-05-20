@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/partitioned_custom_defence/output_all_models_partitioned_custom_rubric_informed.json",
+  "output": "outputs/persistbench/partitioned_custom_categories_defence/output_all_models_partitioned_custom_rubric_informed.json",
   "prompt_template": "prompts/defensive/rubric_informed.txt",
   "dataset": "persistbench",
   "method": "partitioned",
@@ -10,14 +10,14 @@
   "models": [
     {
       "name": "DeepSeek-V3.2",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/partitioned_custom_categories/DeepSeek-V3.2/full_benchmark.jsonl"
     },
     {
       "name": "gpt-oss-120b",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/partitioned_custom_categories/gpt-oss-120b/full_benchmark.jsonl"

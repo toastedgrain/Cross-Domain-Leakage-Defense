@@ -19,6 +19,12 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+DATA_TEXT_SIZE = 14
+AXIS_TEXT_SIZE = 20
+AXIS_NAME_TEXT_SIZE = 24
+TITLE_TEXT_SIZE = 26
+SCALE_TEXT_SIZE = 24
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -63,11 +69,11 @@ DOMAIN_ORDER = [
 plt.rcParams.update(
     {
         "font.family": "DejaVu Sans",
-        "font.size": 10,
-        "axes.titlesize": 13,
-        "axes.labelsize": 11,
-        "xtick.labelsize": 9,
-        "ytick.labelsize": 9,
+        "font.size": AXIS_TEXT_SIZE,
+        "axes.titlesize": TITLE_TEXT_SIZE,
+        "axes.labelsize": AXIS_NAME_TEXT_SIZE,
+        "xtick.labelsize": AXIS_TEXT_SIZE,
+        "ytick.labelsize": AXIS_TEXT_SIZE,
         "figure.dpi": 160,
         "savefig.dpi": 300,
         "pdf.fonttype": 42,
@@ -281,7 +287,7 @@ def annotate_heatmap(ax, values: np.ndarray, counts: np.ndarray, *, fontsize: fl
                 ha="center",
                 va="center",
                 fontsize=fontsize,
-                fontweight="semibold",
+                fontweight="bold",
                 color="white" if value >= 3.6 else "#222222",
             )
 
@@ -307,13 +313,13 @@ def style_axis(
     title: str,
     show_x: bool = True,
     show_y: bool = True,
-    tick_size: float = 8,
+    tick_size: float = AXIS_TEXT_SIZE,
     include_averages: bool = False,
 ) -> None:
     labels = [domain_label(domain) for domain in domains]
     x_labels = list(reversed(labels)) + ["Average"] if include_averages else list(reversed(labels))
     y_labels = ["Average"] + labels if include_averages else labels
-    ax.set_title(title, fontsize=12.5, fontweight="semibold", pad=10)
+    ax.set_title(title, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", pad=14)
     ax.set_xticks(range(len(x_labels)))
     ax.set_xticklabels(x_labels if show_x else [], rotation=35, ha="right", rotation_mode="anchor")
     ax.set_yticks(range(len(y_labels)))
@@ -347,20 +353,22 @@ def save_single_heatmap(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     plot_matrix, plot_counts = add_domain_averages(matrix, counts)
     plot_matrix, plot_counts = reverse_query_domain_columns(plot_matrix, plot_counts)
-    fig, ax = plt.subplots(figsize=(9.1, 8.0))
+    fig, ax = plt.subplots(figsize=(12.4, 10.8))
     cmap = plt.get_cmap("YlOrRd").copy()
     cmap.set_bad("#f0f0f0")
     image = ax.imshow(plot_matrix, cmap=cmap, vmin=0, vmax=5, aspect="equal")
     style_axis(ax, domains, title=title, include_averages=True)
-    ax.set_xlabel("Query domain", fontweight="semibold", labelpad=8)
-    ax.set_ylabel("Memory domain", fontweight="semibold", labelpad=8)
+    ax.set_xlabel("Query domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=8)
+    ax.set_ylabel("Memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", labelpad=8)
     highlight_overall_average_cell(ax, plot_matrix)
-    annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=7.0)
+    annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=DATA_TEXT_SIZE)
     colorbar = fig.colorbar(image, ax=ax, fraction=0.045, pad=0.025)
-    colorbar.set_label("Average Score", fontsize=10.5, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    fig.subplots_adjust(left=0.2, right=0.92, bottom=0.2, top=0.9)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
+    fig.subplots_adjust(left=0.22, right=0.92, bottom=0.28, top=0.86)
     fig.savefig(output_path, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
 
 
@@ -371,7 +379,7 @@ def save_2x2(
     title_suffix: str,
 ) -> None:
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(14.8, 11.6), constrained_layout=False)
+    fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(23.5, 20.0), constrained_layout=False)
     cmap = plt.get_cmap("YlOrRd").copy()
     cmap.set_bad("#f0f0f0")
     image = None
@@ -389,46 +397,154 @@ def save_2x2(
                 title=MEMORY_STRUCTURES[method]["label"],
                 show_x=True,
                 show_y=True,
-                tick_size=5.8,
+                tick_size=AXIS_TEXT_SIZE,
                 include_averages=True,
             )
             ax.tick_params(axis="y", pad=1)
             ax.tick_params(axis="x", pad=1)
             highlight_overall_average_cell(ax, plot_matrix)
-            annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=5.1)
+            annotate_heatmap(ax, plot_matrix, plot_counts, fontsize=DATA_TEXT_SIZE)
 
     colorbar_ax = fig.add_axes([0.865, 0.19, 0.018, 0.66])
     colorbar = fig.colorbar(image, cax=colorbar_ax)
-    colorbar.set_label("Average Score", fontsize=10.5, fontweight="semibold")
+    colorbar.set_label("Average Score", fontsize=SCALE_TEXT_SIZE, fontweight="semibold")
     colorbar.set_ticks([0, 1, 2, 3, 4, 5])
-    fig.supxlabel("Query domain", fontsize=12, fontweight="semibold", y=0.06)
-    fig.supylabel("Memory domain", fontsize=12, fontweight="semibold", x=0.075)
-    fig.suptitle(title_suffix, fontsize=14, fontweight="semibold", y=0.965)
-    fig.subplots_adjust(left=0.12, right=0.845, bottom=0.12, top=0.91, wspace=0.06, hspace=0.18)
+    colorbar.ax.tick_params(labelsize=SCALE_TEXT_SIZE, length=3)
+    fig.supxlabel("Query domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", y=0.045)
+    fig.supylabel("Memory domain", fontsize=AXIS_NAME_TEXT_SIZE, fontweight="semibold", x=0.065)
+    fig.suptitle(title_suffix, fontsize=TITLE_TEXT_SIZE, fontweight="semibold", y=0.97)
+    fig.subplots_adjust(left=0.13, right=0.845, bottom=0.16, top=0.90, wspace=0.1, hspace=0.28)
     fig.savefig(output_path, bbox_inches="tight")
+    fig.savefig(output_path.with_suffix(".pdf"), bbox_inches="tight")
     plt.close(fig)
+
+
+def _format_value(value: float) -> str:
+    if value != value:  # NaN check
+        return ""
+    return f"{value:.3f}"
+
+
+def print_method_rows(
+    *,
+    method: str,
+    model: str,
+    domains: list[str],
+    matrix: np.ndarray,
+    counts: np.ndarray,
+) -> None:
+    method_label = MEMORY_STRUCTURES[method]["label"]
+    plot_matrix, plot_counts = add_domain_averages(matrix, counts)
+    memory_domains = ["Average"] + [domain_label(domain) for domain in domains]
+    query_domains = [domain_label(domain) for domain in domains] + ["Average"]
+    for row_index, memory_domain in enumerate(memory_domains):
+        for col_index, query_domain in enumerate(query_domains):
+            count = int(plot_counts[row_index, col_index])
+            if count == 0:
+                continue
+            print(
+                "\t".join(
+                    [
+                        method_label,
+                        model,
+                        memory_domain,
+                        query_domain,
+                        str(count),
+                        _format_value(float(plot_matrix[row_index, col_index])),
+                    ]
+                )
+            )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--benchmark", type=Path, default=DEFAULT_BENCHMARK)
     parser.add_argument("--output-dir", type=Path, default=OUTDIR)
+    parser.add_argument(
+        "--method",
+        choices=METHODS,
+        action="append",
+        help="Restrict to one or more methods. Default: all methods.",
+    )
+    parser.add_argument(
+        "--model",
+        action="append",
+        help="Restrict to one or more model labels. Default: all models.",
+    )
+    parser.add_argument(
+        "--average-only",
+        action="store_true",
+        help="Only print the average-across-models rows in the console table.",
+    )
+    parser.add_argument(
+        "--no-figures",
+        action="store_true",
+        help="Skip writing PNG/PDF figures (still prints the console table).",
+    )
+    parser.add_argument(
+        "--no-print",
+        action="store_true",
+        help="Skip the console table (still writes figures).",
+    )
     args = parser.parse_args()
 
-    by_method = {
-        method: method_data(method, args.benchmark)
-        for method in METHODS
-    }
+    methods = args.method or METHODS
+
+    by_method = {method: method_data(method, args.benchmark) for method in methods}
 
     models = sorted(
         {model for _, method_models, _, _ in by_method.values() for model in method_models},
         key=sort_model,
     )
 
+    requested_models = set(args.model or [])
+    selected_models = [
+        model for model in models if not requested_models or model in requested_models
+    ]
+
+    if not args.no_print:
+        print(
+            "\t".join(
+                [
+                    "Method",
+                    "Model",
+                    "Memory Domain",
+                    "Query Domain",
+                    "Samples",
+                    "Average Best Judge Score",
+                ]
+            )
+        )
+        for method in methods:
+            domains, _, per_model, average = by_method[method]
+            if not args.average_only:
+                for model in selected_models:
+                    if model not in per_model:
+                        continue
+                    matrix, counts = per_model[model]
+                    print_method_rows(
+                        method=method,
+                        model=model,
+                        domains=domains,
+                        matrix=matrix,
+                        counts=counts,
+                    )
+            avg_matrix, avg_counts = average
+            print_method_rows(
+                method=method,
+                model="Average",
+                domains=domains,
+                matrix=avg_matrix,
+                counts=avg_counts,
+            )
+
+    if args.no_figures:
+        return
+
     for model in models:
         model_dir = args.output_dir / safe_name(model)
         model_grid_data: dict[str, tuple[list[str], np.ndarray, np.ndarray]] = {}
-        for method in METHODS:
+        for method in methods:
             domains, _, per_model, _ = by_method[method]
             matrix, counts = per_model.get(
                 model,
@@ -453,7 +569,7 @@ def main() -> None:
 
     average_dir = args.output_dir / "average"
     average_grid_data: dict[str, tuple[list[str], np.ndarray, np.ndarray]] = {}
-    for method in METHODS:
+    for method in methods:
         domains, _, _, average = by_method[method]
         matrix, counts = average
         average_grid_data[method] = (domains, matrix, counts)
@@ -470,7 +586,7 @@ def main() -> None:
         title_suffix="Average Across Models",
     )
 
-    print(f"Figures saved to: {args.output_dir.resolve()}")
+    print(f"\nFigures saved to: {args.output_dir.resolve()}")
 
 
 if __name__ == "__main__":

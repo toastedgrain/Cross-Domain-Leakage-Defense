@@ -5,22 +5,17 @@ import warnings
 from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, PositiveInt
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 
 FAILURE_TYPE_CROSS_DOMAIN = "cross_domain"
 FAILURE_TYPE_SYCOPHANCY = "sycophancy"
 FAILURE_TYPE_BENEFICIAL = "beneficial_memory_usage"
-FAILURE_TYPE_CIM = "cim"
-DEFAULT_CIM_PROMPT_TEMPLATE = Path("prompts/cim_paper.txt")
-DEFAULT_DATASET = "PersistBench"
-VALID_DATASETS = {"persistbench", "cim"}
 
 VALID_FAILURE_TYPES = {
     FAILURE_TYPE_CROSS_DOMAIN,
     FAILURE_TYPE_SYCOPHANCY,
     FAILURE_TYPE_BENEFICIAL,
-    FAILURE_TYPE_CIM,
 }
 
 # Per-category generation defaults when no global override is set
@@ -28,7 +23,6 @@ DEFAULT_GENERATIONS_BY_FAILURE_TYPE = {
     FAILURE_TYPE_CROSS_DOMAIN: 3,
     FAILURE_TYPE_SYCOPHANCY: 3,
     FAILURE_TYPE_BENEFICIAL: 1,
-    FAILURE_TYPE_CIM: 1,
 }
 
 
@@ -39,7 +33,7 @@ def get_generations_for_failure_type(
     """Resolve generation count for a failure type.
 
     If generations_override is set, uses that for all types.
-    Otherwise uses per-category defaults (3 for cross_domain/sycophancy, 1 for cim).
+    Otherwise uses per-category defaults (3 for cross_domain/sycophancy, 1 for beneficial).
     """
     if generations_override is not None:
         return generations_override
@@ -104,6 +98,8 @@ def validate_failure_type(failure_type: str) -> None:
 class BenchmarkConfig(BaseModel):
     """Benchmark configuration schema."""
 
+    model_config = ConfigDict(extra="ignore")
+
     models: list[ModelEntry] = Field(min_length=1)
     judge_provider: str | None = None
     input: Path
@@ -116,10 +112,6 @@ class BenchmarkConfig(BaseModel):
     limit: PositiveInt | None = None
     batch_poll_timeout_minutes: PositiveInt = 25
     prompt_template: Path | None = None
-
-    # Dataset configuration
-    dataset: str = DEFAULT_DATASET
-    cim_judge_variant: str = "reveal_paper_compat"
 
     judge_model: str | None = None
 
@@ -177,16 +169,6 @@ def load_benchmark_config_data(
             f"Valid values: {sorted(VALID_JUDGE_PROVIDERS)}"
         )
 
-    if config.dataset not in VALID_DATASETS:
-        raise ValueError(
-            f"Invalid dataset '{config.dataset}' in config ({config_path}). "
-            f"Valid values: {sorted(VALID_DATASETS)}"
-        )
-
-    # Load prompt template content if specified and not already provided (e.g. from checkpoint)
-    if config.dataset == "cim" and config.prompt_template is None:
-        config.prompt_template = DEFAULT_CIM_PROMPT_TEMPLATE
-
     if config.prompt_template and not config.prompt_template_content:
         template_path = Path(config.prompt_template)
         if not template_path.exists():
@@ -201,7 +183,6 @@ def load_benchmark_config_data(
     if (
         config.prompt_template_content
         and "{memories}" not in config.prompt_template_content
-        and config.dataset != "cim"
     ):
         raise ValueError(
             "Prompt template must contain the {memories} placeholder. "

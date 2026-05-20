@@ -36,7 +36,6 @@ from benchmark.execution.generation import (
 from benchmark.execution.judgment import (
     SequentialJudgmentExecutor,
     build_judgment_tasks,
-    set_cim_judge_variant,
     set_judge_model,
     set_judge_provider,
 )
@@ -230,56 +229,6 @@ def _merge_partitioned_entries(
     return entries
 
 
-def _merge_partitioned_cim_entries(
-    config: BenchmarkConfig,
-    *,
-    label_memories: bool,
-) -> list[InputEntry]:
-    """CIM partitioned loader.
-
-    Entry metadata (task, recipient, attrs, hash_id, rendered query) and base
-    memories always come from ``config.input``. ``model.input`` overrides only
-    the memories for that model (matched by hash_id); if absent or identical to
-    ``config.input``, the base memories are used for that model too.
-    """
-    base_entries = load_and_validate_entries(config.input, dataset="cim")
-    base_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in base_entries}
-
-    merged: dict[str, InputEntry] = {}
-    for model in config.models:
-        if model.input is not None and model.input != config.input:
-            mem_entries = load_and_validate_entries(model.input, dataset="cim")
-            mem_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in mem_entries}
-        else:
-            mem_by_hash = base_by_hash
-
-        for hash_id, base_entry in base_by_hash.items():
-            source = mem_by_hash.get(hash_id, base_entry)
-            if label_memories:
-                cat_mems = source.get("categorized_memories")
-                model_mems: list[str] = (
-                    [f"{cat}: {mem}" for cat, items in cat_mems.items() for mem in items]
-                    if cat_mems is not None
-                    else list(source["memories"])
-                )
-            else:
-                model_mems = list(source["memories"])
-
-            if hash_id in merged:
-                merged[hash_id]["model_affinity"].add(model.name)
-                merged[hash_id]["model_memories"][model.name] = model_mems
-            else:
-                entry = dict(base_entry)
-                entry["model_affinity"] = {model.name}
-                entry["model_memories"] = {model.name: model_mems}
-                merged[hash_id] = entry
-
-    mode = "partitioned-labeled" if label_memories else "partitioned"
-    entries = list(merged.values())
-    print(f"CIM {mode} mode: {len(entries)} entries across {len(config.models)} model(s)")
-    return entries
-
-
 def _merge_tree_persistbench_entries(config: BenchmarkConfig) -> list[InputEntry]:
     """PersistBench tree loader.
 
@@ -322,79 +271,20 @@ def _merge_tree_persistbench_entries(config: BenchmarkConfig) -> list[InputEntry
     return entries
 
 
-def _merge_tree_cim_entries(config: BenchmarkConfig) -> list[InputEntry]:
-    """CIM tree loader.
-
-    Like the partitioned CIM loader, base metadata (task, recipient, attrs,
-    hash_id, rendered query) always comes from ``config.input`` (the normalized
-    baseline JSONL).  ``model.input`` provides the two-level tree memories
-    (``{"category": {"subcategory": ["memory", ...], ...}, ...}``) which are
-    matched by hash_id and stored per-model so ``_format_generation_memories``
-    can render them as a structured tree in the prompt.
-    """
-    base_entries = load_and_validate_entries(config.input, dataset="cim")
-    base_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in base_entries}
-
-    merged: dict[str, InputEntry] = {}
-    for model in config.models:
-        if model.input is not None and model.input != config.input:
-            mem_entries = load_and_validate_entries(model.input, dataset="cim")
-            mem_by_hash: dict[str, InputEntry] = {e["hash_id"]: e for e in mem_entries}
-        else:
-            mem_by_hash = base_by_hash
-
-        for hash_id, base_entry in base_by_hash.items():
-            source = mem_by_hash.get(hash_id, base_entry)
-            # Prefer the full two-level tree dict; fall back to flat list
-            model_mems = source.get("tree_memories") or list(source["memories"])
-
-            if hash_id in merged:
-                merged[hash_id]["model_affinity"].add(model.name)
-                merged[hash_id]["model_memories"][model.name] = model_mems
-            else:
-                entry = dict(base_entry)
-                entry["model_affinity"] = {model.name}
-                entry["model_memories"] = {model.name: model_mems}
-                merged[hash_id] = entry
-
-    entries = list(merged.values())
-    print(f"CIM tree mode: {len(entries)} entries across {len(config.models)} model(s)")
-    return entries
-
-
-def _load_dataset_entries(config: BenchmarkConfig, effective_dataset: str) -> list[InputEntry]:
-    """Load entries for the given dataset, dispatching on dataset → method.
-
-    For CIM partitioned modes, metadata always comes from ``config.input`` and
-    per-model memories come from ``model.input``. For PersistBench, each model's
-    file is loaded in full. For no-method (baseline), the standard loaders are used.
-    """
-    if effective_dataset == "cim":
-        if config.method == "partitioned":
-            return _merge_partitioned_cim_entries(config, label_memories=False)
-        elif config.method == "partitioned_labeled":
-            return _merge_partitioned_cim_entries(config, label_memories=True)
-        elif config.method == "tree":
-            return _merge_tree_cim_entries(config)
-        return load_and_validate_entries(config.input, dataset="cim")
-    elif effective_dataset == "persistbench":
-        if config.method == "partitioned":
-            return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=False)
-        elif config.method == "partitioned_labeled":
-            return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=True)
-        elif config.method == "tree":
-            return _merge_tree_persistbench_entries(config)
-        return load_and_validate_entries(config.input)
-    else:
-        raise FatalBenchmarkError(
-            f"Invalid dataset '{effective_dataset}'. Valid values: PersistBench or CIM."
-        )
+def _load_dataset_entries(config: BenchmarkConfig) -> list[InputEntry]:
+    """Load PersistBench entries, dispatching on the configured method."""
+    if config.method == "partitioned":
+        return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=False)
+    if config.method == "partitioned_labeled":
+        return _merge_partitioned_entries(config, load_and_validate_entries, label_memories=True)
+    if config.method == "tree":
+        return _merge_tree_persistbench_entries(config)
+    return load_and_validate_entries(config.input)
 
 
 def _load_from_file(
     file_path: Path,
     limit: int | None = None,
-    dataset_override: str | None = None,
     config: BenchmarkConfig | None = None,
 ) -> tuple[list[InputEntry], BenchmarkConfig, bool, dict[str, Any] | None]:
     """Load entries and config from either a config file or a checkpoint file.
@@ -414,8 +304,7 @@ def _load_from_file(
         if config.method in ("partitioned", "partitioned_labeled", "tree"):
             # Re-load from input files so entries carry model_affinity/model_memories
             # (those fields are not persisted in the checkpoint to keep output clean)
-            effective_dataset = dataset_override or config.dataset
-            entries = _load_dataset_entries(config, effective_dataset)
+            entries = _load_dataset_entries(config)
         else:
             entries = extract_entries_from_checkpoint(checkpoint)
         is_fresh_config = False
@@ -424,8 +313,7 @@ def _load_from_file(
         if config is None:
             config = load_benchmark_config_data(data, config_path=file_path)
 
-        effective_dataset = dataset_override or config.dataset
-        entries = _load_dataset_entries(config, effective_dataset)
+        entries = _load_dataset_entries(config)
         is_fresh_config = True
         if limit is None:
             limit = config.limit
@@ -447,8 +335,6 @@ async def run_benchmark(
     batch_poll_timeout_minutes: int | None = None,
     concurrency_override: int | None = None,
     store_raw_api_responses: bool | None = None,
-    dataset: str | None = None,
-    cim_judge_variant: str | None = None,
 ) -> BenchmarkStats:
     """Run benchmark workflow from a config file or checkpoint file.
 
@@ -458,32 +344,19 @@ async def run_benchmark(
         file_path: Path to config file or checkpoint file.
         skip_generation: Skip generation phase (judge-only mode).
         skip_judge: Skip judgment phase (generation-only mode).
-        dataset: Override dataset type ('PersistBench' or 'CIM').
-        cim_judge_variant: CIM judge variant ('default' or 'reveal_paper_compat').
 
     Returns:
         Benchmark stats for this run/checkpoint.
     """
     path = Path(file_path)
 
-    # Pre-load config to apply CLI overrides before loading entries
     data, is_checkpoint = _load_json_file(path)
     pre_config: BenchmarkConfig | None = None
     if not is_checkpoint:
         pre_config = load_benchmark_config_data(data, config_path=path)
-        if dataset is not None:
-            pre_config.dataset = dataset
-        if cim_judge_variant is not None:
-            pre_config.cim_judge_variant = cim_judge_variant
-
-        # Re-run validation/loading so dataset overrides can resolve their
-        # prompt template defaults and the final config stays normalized.
-        config_data = pre_config.model_dump(mode="python")
-        config_data["prompt_template_content"] = None
-        pre_config = load_benchmark_config_data(config_data, config_path=path)
 
     entries, config, is_fresh_config, existing_checkpoint = _load_from_file(
-        path, limit=limit, dataset_override=dataset, config=pre_config
+        path, limit=limit, config=pre_config
     )
 
     if store_raw_api_responses is not None:
@@ -498,12 +371,7 @@ async def run_benchmark(
             "Config must set 'judge_provider' for benchmark runs."
         )
 
-    # Set judge model and provider from config only.
     set_judge_model(config.judge_model)
-
-    # Set CIM judge variant
-    set_cim_judge_variant(config.cim_judge_variant)
-
     set_judge_provider(config.judge_provider)
     resolved_provider = config.judge_provider
 
@@ -631,8 +499,6 @@ async def run_benchmark_with_retry(
     retry_enabled: bool = False,
     concurrency_override: int | None = None,
     store_raw_api_responses: bool | None = None,
-    dataset: str | None = None,
-    cim_judge_variant: str | None = None,
 ) -> BenchmarkStats:
     """Run benchmark with optional run-level retry on failures.
 
@@ -652,8 +518,6 @@ async def run_benchmark_with_retry(
         skip_generation=skip_generation,
         batch_poll_timeout_minutes=batch_poll_timeout_minutes,
         store_raw_api_responses=store_raw_api_responses,
-        dataset=dataset,
-        cim_judge_variant=cim_judge_variant,
     )
 
     if not retry_enabled:

@@ -1,6 +1,6 @@
 {
   "input": "benchmark_samples/persistbench/baseline/full_benchmark.jsonl",
-  "output": "outputs/persistbench/all_configs/tree/output_all_models_tree_informed.json",
+  "output": "outputs/persistbench/tree/output_all_models_tree_informed.json",
   "dataset": "persistbench",
   "method": "tree",
   "prompt_template": "prompts/evaluation_tree_informed.txt",
@@ -10,14 +10,14 @@
   "models": [
     {
       "name": "DeepSeek-V3.2",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1/",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/tree/DeepSeek-V3.2/full_benchmark.jsonl"
     },
     {
       "name": "gpt-oss-120b",
-      "base_url": "https://algoverse-hakeem.services.ai.azure.com/openai/v1",
+      "base_url": "",
       "provider": "azure",
       "mode": "sequential",
       "input": "benchmark_samples/persistbench/tree/gpt-oss-120b/full_benchmark.jsonl"

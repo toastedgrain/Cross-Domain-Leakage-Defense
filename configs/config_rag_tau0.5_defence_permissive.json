@@ -1,0 +1,75 @@
+{
+  "input": "benchmark_samples/persistbench/rag/persistbench_rag_tau0.5.jsonl",
+  "output": "outputs/persistbench/rag_defence/output_all_models_rag_tau0.5_permissive.json",
+  "prompt_template": "prompts/defensive/permissive.txt",
+  "dataset": "persistbench",
+  "judge_provider": "vertexai",
+  "judge_model": "moonshotai/kimi-k2-thinking-maas",
+  "concurrency": 50,
+  "models": [
+    {
+      "name": "DeepSeek-V3.2",
+      "base_url": "",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": ""
+    },
+    {
+      "name": "gpt-oss-120b",
+      "base_url": "",
+      "provider": "azure",
+      "mode": "sequential",
+      "input": ""
+    },
+    {
+      "name": "xai/grok-4.1-fast-non-reasoning",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    },
+    {
+      "name": "zai-org/glm-4.7-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    },
+    {
+      "name": "meta/llama-3.3-70b-instruct-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "us-central1",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    },
+    {
+      "name": "qwen/qwen3-235b-a22b-instruct-2507-maas",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    },
+    {
+      "name": "google/gemini-3.1-pro-preview",
+      "provider": "vertexai",
+      "mode": "sequential",
+      "api_params": {
+        "location": "global",
+        "max_output_tokens": 1024
+      },
+      "input": ""
+    }
+  ]
+}

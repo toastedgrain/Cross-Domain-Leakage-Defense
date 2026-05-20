@@ -30,8 +30,7 @@ dependencies = [
 
 [project.scripts]
 benchmark = "benchmark.eval_cli:main"
-failure-rates = "analysis.failure_rates:main"
-optimize-prompt = "benchmark.optimize_cli:main"
+failure-rates = "analysis.persistbench.failure_rates:main"
 
 [dependency-groups]
 dev = [

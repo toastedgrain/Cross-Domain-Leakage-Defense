@@ -21,7 +21,7 @@ Two skip mechanisms keep this from re-spending credits:
 
 1. Pre-existing runs. Tau values 0.25 / 0.5 / 0.75 already have results from
    the earlier all-failure-types RAG sweep at
-   `outputs/persistbench/rag/persist_rag_tau{tau}_llama3p3_70b_qwen3_235b.json`.
+   `outputs/persistbench/rag/output_persistbench_rag_tau{tau}_llama_qwen.json`.
    These outputs include Qwen judge scores on the cross_domain subset, so we
    reuse them directly: no dataset prep, no benchmark run, the summary just
    reads cross_domain entries from the existing file.
@@ -58,13 +58,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 THRESHOLDS: list[float] = [0.25, 0.35, 0.45, 0.55, 0.65, 0.75]
 QWEN_MODEL = "qwen/qwen3-235b-a22b-instruct-2507-maas"
 
 DATASET_DIR = PROJECT_ROOT / "benchmark_samples" / "persistbench" / "rag"
-CONFIG_DIR = PROJECT_ROOT / "configs" / "persistbench" / "rag" / "fine_tuning"
+CONFIG_DIR = PROJECT_ROOT / "configs" / "persistbench" / "fine_tuning"
 OUTPUT_DIR = PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "fine_tuning"
 
 # Tau values whose RAG run already exists from a prior all-failure-types pass.
@@ -73,9 +73,9 @@ OUTPUT_DIR = PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "fine_tuning"
 # cross_domain + QWEN_MODEL, so the extra sycophancy/beneficial entries in
 # the file are simply ignored.
 PREEXISTING_OUTPUTS: dict[float, Path] = {
-    0.25: PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "persist_rag_tau0.25_llama3p3_70b_qwen3_235b.json",
-    0.5:  PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "persist_rag_tau0.5_llama3p3_70b_qwen3_235b.json",
-    0.75: PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "persist_rag_tau0.75_llama3p3_70b_qwen3_235b.json",
+    0.25: PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "output_persistbench_rag_tau0.25_llama_qwen.json",
+    0.5: PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "output_persistbench_rag_tau0.5_llama_qwen.json",
+    0.75: PROJECT_ROOT / "outputs" / "persistbench" / "rag" / "output_persistbench_rag_tau0.75_llama_qwen.json",
 }
 
 
@@ -90,6 +90,7 @@ PREP_SCRIPT = (
     / "benchmark"
     / "memory_normalization"
     / "persistbench"
+    / "vertexai_requests"
     / "rag_persistbench_memories.py"
 )
 
@@ -113,7 +114,7 @@ def config_path(tau: float) -> Path:
 
 
 def output_path(tau: float) -> Path:
-    return OUTPUT_DIR / f"persist_rag_cross_domain_tau{_tau_str(tau)}_qwen3_235b.json"
+    return OUTPUT_DIR / f"output_persistbench_rag_tau{_tau_str(tau)}_qwen.json"
 
 
 def _rel(path: Path) -> str:
@@ -295,11 +296,11 @@ def fr_at_k(out_file: Path, *, k: int = 3, threshold: int = 3) -> tuple[float | 
 def summary_path(tau: float) -> Path:
     """Pick which output file to read FR@K from for this tau.
 
-    Prefers the fine_tuning output when present (a fresh run). Otherwise falls
-    back to the pre-existing all-categories run we already paid for.
+    Prefers a fine_tuning output when it has scorable Qwen cross-domain entries.
+    Otherwise falls back to the pre-existing all-categories run we already paid for.
     """
     new = output_path(tau)
-    if new.exists():
+    if new.exists() and fr_at_k(new)[1] > 0:
         return new
     pre = preexisting_output(tau)
     return pre if pre is not None else new  # may still not exist; fr_at_k handles that
@@ -351,9 +352,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    prepare_datasets(force=args.rebuild_datasets)
-
     if not args.skip_run:
+        prepare_datasets(force=args.rebuild_datasets)
         for tau in THRESHOLDS:
             existing = preexisting_output(tau)
             if existing is not None and not args.force:
