@@ -235,4 +235,46 @@ fig.savefig(OUTDIR / 'combined_preview_grid.pdf', bbox_inches='tight')
 fig.savefig(OUTDIR / 'combined_preview_grid.png', bbox_inches='tight')
 plt.close(fig)
 
+deepseek_oss_models = ["DeepSeek V3.2", "GPT-OSS 120B"]
+fig, axes = plt.subplots(1, 2, figsize=(10.8, 5.4))
+
+for ax, model in zip(axes, deepseek_oss_models):
+    vals = DATA[model]
+    xs = [vals[k]['Beneficial'] for k in method_keys]
+    ys = [vals[k]['CD'] for k in method_keys]
+
+    xmin = min(xs) - 3
+    xmax = max(xs) + 3
+    ymin = min(ys) - 3
+    ymax = max(ys) + 3
+
+    if model == "DeepSeek V3.2":
+        label_sides = ['right', 'left', 'right', 'bottom_right']
+    else:
+        label_sides = ['right', 'right', 'right', 'right']
+
+    draw_points(
+        ax,
+        xs,
+        ys,
+        point_size=25,
+        label_fontsize=DATA_TEXT_SIZE,
+        label_offset=0.3,
+        label_sides=label_sides,
+    )
+
+    ax.set_xlim(xmin, xmax)
+    ax.set_ylim(ymin, ymax)
+
+    ax.set_xlabel('Beneficial-memory failure (%)', fontsize=AXIS_NAME_TEXT_SIZE, labelpad=4)
+    ax.set_ylabel('Cross-domain leakage (%)', fontsize=AXIS_NAME_TEXT_SIZE, labelpad=4)
+    ax.set_title(model, fontsize=TITLE_TEXT_SIZE, fontweight='semibold', pad=4, color='#222222')
+
+    style_axis(ax)
+
+fig.tight_layout()
+fig.savefig(OUTDIR / 'deepseek_oss_only.pdf', bbox_inches='tight')
+fig.savefig(OUTDIR / 'deepseek_oss_only.png', bbox_inches='tight')
+plt.close(fig)
+
 print(f'Figures saved to: {OUTDIR.resolve()}')
